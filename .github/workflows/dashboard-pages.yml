@@ -321,7 +321,10 @@ jobs:
                                   f'<a href="{_url}" style="color:inherit">{_emoji} {_pct}%</a></span></td>')
                   else:
                       mc_badge = badge('compile', 'CI / Mass Compile')
-              via_badge = badge('analyze',   'CI / VI Analyzer')
+              # Consider both analyzer platforms (mirrors the diff badge): a revision
+              # analyzed only on Linux still surfaces its VI Analyzer result instead of
+              # showing nothing because the Windows-only context is absent.
+              via_badge = badge('analyze',   'CI / VI Analyzer', 'CI / VI Analyzer (Linux)')
               # The diff badge opens the unified VI Browser filtered to this commit's
               # changed VIs (each links to its diff report), rather than a separate table.
               diff_badge= badge('diff',      'CI / VIDiff (windows)', 'CI / VIDiff (linux)',
