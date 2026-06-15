@@ -1,0 +1,113 @@
+# Publish a release when the catalog version changes.
+#
+# This is what makes the TOKEN-FREE update path work for clients: a consumer pins
+# the reusable workflow / actions at the major alias (e.g. @v1) and, optionally,
+# runs Dependabot. When this repo publishes a new version, this workflow:
+#   1. creates the immutable tag  v<MAJOR>.<MINOR>.<PATCH>  + a GitHub Release, and
+#   2. force-moves the major alias  v<MAJOR>  and minor alias  v<MAJOR>.<MINOR>
+#      to the released commit.
+# So every consumer pinned at @v1 receives non-breaking improvements automatically
+# (zero changes in their repo, no token), and Dependabot can also open a reviewable
+# PR to a specific version. Creating tags/releases uses the built-in GITHUB_TOKEN —
+# no Personal Access Token is involved (a tag is a ref, not a workflow-file edit).
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/labview-ci/catalog.json'
+  workflow_dispatch:
+    inputs:
+      move_aliases:
+        description: 'Re-point the v<major> / v<major>.<minor> aliases at the current version even if the tag already exists'
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create tags + GitHub Releases (built-in token; no PAT)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag the version and move the major/minor aliases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_ALIASES: ${{ inputs.move_aliases }}
+        run: |
+          set -euo pipefail
+          CAT=.github/labview-ci/catalog.json
+          VER=$(python3 -c "import json;print(json.load(open('$CAT'))['version'])")
+          case "$VER" in
+            [0-9]*.[0-9]*.[0-9]*) : ;;
+            *) echo "::error::catalog version '$VER' is not MAJOR.MINOR.PATCH"; exit 1 ;;
+          esac
+          MAJOR=${VER%%.*}; REST=${VER#*.}; MINOR=${REST%%.*}
+          TAG="v${VER}"; MAJOR_ALIAS="v${MAJOR}"; MINOR_ALIAS="v${MAJOR}.${MINOR}"
+          echo "version=$VER  tag=$TAG  aliases=$MAJOR_ALIAS,$MINOR_ALIAS"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          NEW_TAG=false
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists."
+          else
+            git tag -a "${TAG}" -m "LabVIEW CI ${TAG}"
+            git push origin "${TAG}"
+            NEW_TAG=true
+            echo "Created tag ${TAG}."
+          fi
+
+          # Move the major + minor aliases to this commit (the moving-alias contract:
+          # @v1 always points at the latest non-breaking release).
+          if [ "$NEW_TAG" = "true" ] || [ "${FORCE_ALIASES}" = "true" ]; then
+            for A in "$MAJOR_ALIAS" "$MINOR_ALIAS"; do
+              git tag -f "$A" "$TAG^{}"
+              git push -f origin "$A"
+              echo "Moved alias ${A} -> ${TAG}."
+            done
+          fi
+
+          # Build release notes from the catalog's newest history entry.
+          python3 - "$CAT" > /tmp/relnotes.md <<'PY'
+          import json, sys
+          c = json.load(open(sys.argv[1], encoding='utf-8'))
+          rels = (c.get('history') or {}).get('releases') or []
+          rel = rels[0] if rels else {}
+          out = []
+          if rel.get('summary'): out += [rel['summary'], '']
+          for h in rel.get('highlights') or []: out.append(f'- {h}')
+          out += ['', 'Consumers pinned at the major alias (e.g. `@v%s`) receive this automatically.'
+                  % (str(c.get('version','1')).split('.')[0])]
+          open('/tmp/reltitle.txt','w').write(rel.get('title') or f"LabVIEW CI {c.get('version','')}")
+          print('\n'.join(out))
+          PY
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --title "$(cat /tmp/reltitle.txt)" --notes-file /tmp/relnotes.md
+            echo "Updated release ${TAG}."
+          else
+            gh release create "${TAG}" --target "$GITHUB_SHA" \
+              --title "$(cat /tmp/reltitle.txt)" --notes-file /tmp/relnotes.md
+            echo "Published release ${TAG}."
+          fi
+
+          {
+            echo "## Released ${TAG}"
+            echo ""
+            echo "- Immutable tag \`${TAG}\` published."
+            echo "- Aliases \`${MAJOR_ALIAS}\` and \`${MINOR_ALIAS}\` now point at \`${TAG}\`."
+            echo ""
+            echo "Consumers pinned at \`@${MAJOR_ALIAS}\` get this update automatically — no token, no action."
+          } >> "$GITHUB_STEP_SUMMARY"
