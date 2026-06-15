@@ -64,7 +64,6 @@ jobs:
         run: |
           python3 - <<'PYEOF'
           import json, os, re, sys, urllib.request, urllib.error
-          from urllib.parse import quote
 
           token    = os.environ['GH_TOKEN']
           repo     = os.environ['REPO']
@@ -313,11 +312,10 @@ jobs:
                       _passed = (_st == 'passed') or (_st is None and _pct >= 100)
                       _col = '#2ea043' if _passed else ('#da3633' if _failed else '#bb8009')
                       _emoji = '✅' if _passed else ('❌' if _failed else '⚠️')
-                      # Open the report inside the framed viewer (chrome + "← CI Dashboard"
-                      # back-nav) rather than as a bare full-page report.
-                      _src = quote(f'../masscompile/{sha}/index.html', safe='')
-                      _vt  = quote(f'Mass Compile · {short}')
-                      _url = f'{pages_url}/report/index.html?title={_vt}&src={_src}&sha={sha}'
+                      # The Mass Compile report is now a full friendly page — problems
+                      # grouped by VI, a Windows/Linux toggle, a snapshot drawer, and its
+                      # own dashboard nav — so link straight to it (no iframe wrapper).
+                      _url = f'{pages_url}/masscompile/{sha}/index.html'
                       mc_badge = (f'<td style="text-align:center"><span title="{_ok}/{_tot} project VIs compiled" '
                                   f'style="background:{_col};color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em">'
                                   f'<a href="{_url}" style="color:inherit">{_emoji} {_pct}%</a></span></td>')

@@ -24,6 +24,10 @@ inputs:
     description: 'Report output directory (relative to the workspace).'
     required: false
     default: 'ci-out/masscompile'
+  pages-url:
+    description: 'Base GitHub Pages URL (for report nav/snapshot links). Defaults to https://<owner>.github.io/<repo>.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -45,3 +49,32 @@ runs:
             -WorkspaceRoot "C:\workspace" `
             -ReportDir     "C:\workspace\${{ inputs.report-dir }}" `
             -LabVIEWPath   "C:\Program Files\National Instruments\LabVIEW ${{ inputs.labview-version }}\LabVIEW.exe"
+
+    # Turn the plain log dump into a navigable report (problems grouped by VI,
+    # snapshot drawer, Windows/Linux toggle, dashboard nav). Runs on the runner
+    # host (not in the container) so it can enumerate the workspace; the bundled
+    # build-masscompile-report.py is kept in sync with .github/labview/.
+    - name: Build friendly Mass Compile report
+      shell: bash
+      continue-on-error: true
+      run: |
+        REPORT_DIR="${{ github.workspace }}/${{ inputs.report-dir }}"
+        [ -f "$REPORT_DIR/index.html" ] || exit 0
+        PAGES="${{ inputs.pages-url }}"
+        if [ -z "$PAGES" ]; then
+          owner="${GITHUB_REPOSITORY%%/*}"; repo="${GITHUB_REPOSITORY#*/}"
+          PAGES="https://${owner}.github.io/${repo}"
+        fi
+        python "${{ github.action_path }}/build-masscompile-report.py" \
+          --log        "$REPORT_DIR/masscompile.log" \
+          --workspace  "${{ github.workspace }}" \
+          --out        "$REPORT_DIR" \
+          --platform   windows \
+          --meta       "$REPORT_DIR/summary.json" \
+          --sha        "${{ github.sha }}" \
+          --repo       "${{ github.repository }}" \
+          --pages-url  "$PAGES" \
+          --labview-version "${{ inputs.labview-version }}" \
+          --commit-msg "$(git log -1 --pretty=%s)" \
+          --author     "$(git log -1 --pretty=%an)" \
+          --date       "$(git log -1 --pretty=%cI)"
