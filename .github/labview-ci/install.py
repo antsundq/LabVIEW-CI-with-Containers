@@ -482,6 +482,82 @@ def thin_install(catalog: dict, target_root: Path, owner: str | None, name: str 
     return 0
 
 
+def consumer_dashboard_workflow(catalog: dict) -> str:
+    """Thin dashboard workflow for a vendored consumer.
+
+    The dashboard generator lives in actions/dashboard, a LOCAL path that only
+    exists in the tooling repo (the source's own dashboard-pages.yml runs it via
+    ./actions/dashboard) and that cannot be copied into a consumer because the
+    branding substitution would rewrite the generator's source-repo references.
+    So a consumer runs the dashboard by checking the tooling out at its opted-in
+    ref into _lvci/ at runtime and using ./_lvci/actions/dashboard - the same
+    approach as --thin. This is written over the vendored copy after install.
+    """
+    src = catalog.get("source", {}) or {}
+    src_repo = src.get("repo", "") or ""
+    ref = src.get("ref", "") or "main"
+    return (
+        "# CI Dashboard \u2014 GitHub Pages. Thin caller installed by .github/labview-ci/install.py.\n"
+        "# The dashboard build logic lives in the shared composite action, pulled at the tooling\n"
+        "# version this repo opted into (.github/labview-ci.yml: source.ref) and checked out at\n"
+        "# runtime \u2014 so this repo keeps no copy of the generator and the dashboard updates only\n"
+        "# when you opt in. Owns the triggers + the Pages deploy.\n"
+        "name: CI Dashboard \u2014 GitHub Pages\n\n"
+        "on:\n"
+        "  status:\n"
+        "  workflow_run:\n"
+        "    workflows:\n"
+        '      - "Mass Compile \u2014 Windows Container"\n'
+        '      - "Mass Compile Backfill \u2014 Windows Container"\n'
+        '      - "Run VI Analyzer \u2014 Windows Container"\n'
+        '      - "Run VI Analyzer \u2014 Linux Container"\n'
+        '      - "VIDiff Report \u2014 Windows Container"\n'
+        '      - "VIDiff Report \u2014 Linux Container"\n'
+        '      - "VIDiff Deploy \u2014 Pages + PR Comment"\n'
+        '      - "VI Snapshots and VI Browser"\n'
+        "    types: [completed]\n"
+        "  schedule:\n"
+        "    - cron: '0 * * * *'\n"
+        "  workflow_dispatch:\n\n"
+        "concurrency:\n"
+        "  group: dashboard-pages\n"
+        "  cancel-in-progress: true\n\n"
+        "permissions:\n"
+        "  contents: write\n"
+        "  statuses: read\n"
+        "  actions: read\n\n"
+        "jobs:\n"
+        "  build-dashboard:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: Checkout repository\n"
+        "        uses: actions/checkout@v4\n"
+        "      - name: Read opted-in tooling ref from config\n"
+        "        id: cfg\n"
+        "        shell: bash\n"
+        "        run: |\n"
+        "          REF=$(awk '/^[[:space:]]*ref:[[:space:]]/{print $2; exit}' .github/labview-ci.yml 2>/dev/null)\n"
+        '          echo "ref=${REF:-' + ref + '}" >> "$GITHUB_OUTPUT"\n'
+        "      - name: Check out tooling (opted-in version)\n"
+        "        uses: actions/checkout@v4\n"
+        "        with:\n"
+        "          repository: " + src_repo + "\n"
+        "          ref: ${{ steps.cfg.outputs.ref }}\n"
+        "          path: _lvci\n"
+        "      - name: Build CI dashboard\n"
+        "        uses: ./_lvci/actions/dashboard\n"
+        "        with:\n"
+        "          github-token: ${{ secrets.GITHUB_TOKEN }}\n"
+        "      - name: Deploy dashboard to GitHub Pages\n"
+        "        uses: peaceiris/actions-gh-pages@v4\n"
+        "        with:\n"
+        "          github_token: ${{ secrets.GITHUB_TOKEN }}\n"
+        "          publish_dir: ci-out/dashboard\n"
+        "          destination_dir: .\n"
+        "          keep_files: true\n"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Install LabVIEW CI capabilities into a repository.",
@@ -589,6 +665,16 @@ def main() -> int:
     for entry in file_list:
         copy_entry(entry, source_root, target_root, subs, force, args.dry_run, stats,
                    preserve, update)
+
+    # The dashboard generator (actions/dashboard) is a local path that only exists
+    # in the tooling repo and can't be rebranded into a consumer, so the vendored
+    # source dashboard-pages.yml (which runs ./actions/dashboard) can't work here.
+    # Replace it with a thin caller that checks the tooling out at runtime.
+    if any(f.endswith("dashboard-pages.yml") for f in file_list) and not args.dry_run:
+        dpath = target_root / ".github" / "workflows" / "dashboard-pages.yml"
+        if dpath.exists():
+            dpath.write_text(consumer_dashboard_workflow(catalog), encoding="utf-8")
+            log("  rewrite (thin)  .github/workflows/dashboard-pages.yml")
 
     write_manifest(target_root, catalog, [a for a in activities if a in
                    {c["id"] for c in catalog.get("capabilities", []) if c.get("status") != "planned"}],
