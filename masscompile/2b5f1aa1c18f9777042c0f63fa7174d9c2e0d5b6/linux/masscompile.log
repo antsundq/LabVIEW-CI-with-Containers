@@ -1,0 +1,15 @@
+LabVIEWCLI started logging in file:  /tmp/lvtemporary_906063.log
+Using LabVIEW: "/usr/local/natinst/LabVIEW-2026-64/labviewprofull"
+LabVIEW launched successfully.
+Connection established with LabVIEW at port number 3363.
+
+Operation output: 
+#### Starting Mass Compile: Tue, Jun 16, 2026 03:59:23 AM
+  Directory: "/workspace"
+/workspace/.github/labview/PrintToSingleFileHtml/PrintToSingleFileHtml.lvclass (PrintToSingleFileHtml.lvclass)
+    - The class expected to be at "/workspace/.github/labview/CoreOperation/CoreOperation.lvclass" was loaded from "/usr/local/natinst/share/nilvcli/Operations/CoreOperation/CoreOperation.lvclass".
+  ### Bad VI:    "Revidyne Generator.lvlib:VI Tree.vi"	Path="/workspace/example/Curriculum/Generator API/subVIs/Public/VI Tree.vi" 
+#### Finished Mass Compile: Tue, Jun 16, 2026 03:59:33 AM
+
+MassCompile operation failed.
+
