@@ -75,60 +75,96 @@ Write-Host "  Config src : $ConfigTemplate"
 $ConfigXml = Get-Content $ConfigTemplate -Raw
 $ConfigXml = $ConfigXml -replace '__WORKSPACE_PATH__', $WorkspaceRoot
 
-# ── Select the FULL default test suite ───────────────────────────────────────
+# ── Select the FULL default VI Analyzer test suite ───────────────────────────
 # The native VI Analyzer requires <TestConfigData> to explicitly enumerate every
 # test to run; an EMPTY <TestConfigData> makes LabVIEW run ZERO tests and report a
-# misleading "VIs Analyzed 1 / Total Tests Run 0" (the empty-report bug). Rather
-# than hard-code ~56 test paths that drift between LabVIEW versions, enumerate the
-# analyzer's own test libraries (*.llb) shipped with THIS LabVIEW and select them
-# all. Best-effort: on any failure (or none found) we keep the known-good fallback
-# tests already committed in the config template, so the report is never empty.
+# misleading "VIs Analyzed 1 / Total Tests Run 0" (the empty-report bug). The full
+# default suite (~90 tests) ships as test libraries (*.llb) with the VI Analyzer
+# Toolkit, but their location varies by LabVIEW version (historically
+# <LV>\project\_VI Analyzer\_tests; newer builds put them under vi.lib). So probe
+# the known locations, then fall back to a scoped search for any test library
+# whose path contains "_VI Analyzer", and select them all. Best-effort: on any
+# failure (or none found) we keep the known-good fallback tests already committed
+# in the config template, so the report is never empty.
 try {
-    $lvDir     = (Split-Path $LabVIEWPath).TrimEnd('\', '/')
-    $testsRoot = Join-Path $lvDir 'project\_VI Analyzer\_tests'
-    if (Test-Path $testsRoot) {
-        $llbs = @(Get-ChildItem -LiteralPath $testsRoot -Recurse -Filter '*.llb' -File -ErrorAction SilentlyContinue)
-        if ($llbs.Count -gt 0) {
-            # [char]34 is a double-quote, sourced as a variable so the XML lines
-            # below need no literal or escaped quotes (kept pure-ASCII and free of
-            # backtick-quote escaping, which keeps the parser unambiguous).
-            $q  = [char]34
-            $sb = New-Object System.Text.StringBuilder
-            [void]$sb.AppendLine('<TestConfigData>')
-            foreach ($llb in ($llbs | Sort-Object FullName)) {
-                $name = [System.IO.Path]::GetFileNameWithoutExtension($llb.Name)
-                $rel  = $llb.FullName.Substring($lvDir.Length).TrimStart('\', '/').Replace('\', '/')
-                [void]$sb.AppendLine("`t`t<Test>")
-                [void]$sb.AppendLine("`t`t`t<Name>${q}$name${q}</Name>")
-                [void]$sb.AppendLine("`t`t`t<Ranking>1</Ranking>")
-                [void]$sb.AppendLine("`t`t`t<MaxFailures>1000</MaxFailures>")
-                [void]$sb.AppendLine("`t`t`t<BasePath>${q}LabVIEW${q}</BasePath>")
-                [void]$sb.AppendLine("`t`t`t<RelativePath>${q}$rel${q}</RelativePath>")
-                [void]$sb.AppendLine("`t`t`t<Selected>TRUE</Selected>")
-                [void]$sb.AppendLine("`t`t`t<Controls>")
-                [void]$sb.AppendLine("`t`t`t</Controls>")
-                [void]$sb.AppendLine("`t`t</Test>")
-            }
-            [void]$sb.Append("`t</TestConfigData>")
-            $newBlock = $sb.ToString()
+    $lvDir = (Split-Path $LabVIEWPath).TrimEnd('\', '/')
 
-            # Replace the template's <TestConfigData>...</TestConfigData> wholesale
-            # (substring, not regex, to avoid metacharacter pitfalls in test paths).
-            $startTag = '<TestConfigData>'
-            $endTag   = '</TestConfigData>'
-            $si = $ConfigXml.IndexOf($startTag)
-            $ei = $ConfigXml.IndexOf($endTag)
-            if ($si -ge 0 -and $ei -gt $si) {
-                $ConfigXml = $ConfigXml.Substring(0, $si) + $newBlock + $ConfigXml.Substring($ei + $endTag.Length)
-                Write-Host ("  Test suite : selected {0} tests (full default suite from {1})" -f $llbs.Count, $testsRoot)
-            } else {
-                Write-Warning "  Test suite : could not locate <TestConfigData> in template - using committed fallback tests"
-            }
+    # Fast path: probe known layouts (newest-style locations included).
+    $testsRoot = $null
+    $llbs      = @()
+    $candidates = @(
+        'project\_VI Analyzer\_tests',
+        'vi.lib\addons\_VI Analyzer\_tests',
+        'vi.lib\addons\analyzer\_tests',
+        'resource\Framework\Providers\VIAnalyzer\_tests'
+    ) | ForEach-Object { Join-Path $lvDir $_ }
+    foreach ($c in $candidates) {
+        if (Test-Path $c) {
+            $llbs = @(Get-ChildItem -LiteralPath $c -Recurse -Filter '*.llb' -File -ErrorAction SilentlyContinue)
+            if ($llbs.Count -gt 0) { $testsRoot = $c; break }
+        }
+    }
+
+    # Fallback: scoped recursive search for *.llb whose path contains "_VI Analyzer".
+    # Scoped to the dirs that can hold add-on libraries so we never walk the huge
+    # examples tree; the *.llb filter is applied by the filesystem so this is bounded.
+    if ($llbs.Count -eq 0) {
+        foreach ($r in @('vi.lib', 'project', 'resource')) {
+            $base = Join-Path $lvDir $r
+            if (-not (Test-Path $base)) { continue }
+            $hits = @(Get-ChildItem -LiteralPath $base -Recurse -Filter '*.llb' -File -ErrorAction SilentlyContinue |
+                      Where-Object { $_.FullName -match '_VI Analyzer' })
+            if ($hits.Count -gt 0) { $llbs = $hits; $testsRoot = $base; break }
+        }
+    }
+
+    if ($llbs.Count -gt 0) {
+        # [char]34 is a double-quote, sourced as a variable so the XML lines below
+        # need no literal or escaped quotes (kept pure-ASCII and free of
+        # backtick-quote escaping, which keeps the PowerShell parser unambiguous).
+        $q  = [char]34
+        $sb = New-Object System.Text.StringBuilder
+        [void]$sb.AppendLine('<TestConfigData>')
+        foreach ($llb in ($llbs | Sort-Object FullName)) {
+            $name = [System.IO.Path]::GetFileNameWithoutExtension($llb.Name)
+            # RelativePath is resolved by VIA against BasePath "LabVIEW" (the LabVIEW
+            # program dir), so emit each test path relative to $lvDir regardless of
+            # whether the suite lives under project\ or vi.lib\.
+            $rel  = $llb.FullName.Substring($lvDir.Length).TrimStart('\', '/').Replace('\', '/')
+            [void]$sb.AppendLine("`t`t<Test>")
+            [void]$sb.AppendLine("`t`t`t<Name>${q}$name${q}</Name>")
+            [void]$sb.AppendLine("`t`t`t<Ranking>1</Ranking>")
+            [void]$sb.AppendLine("`t`t`t<MaxFailures>1000</MaxFailures>")
+            [void]$sb.AppendLine("`t`t`t<BasePath>${q}LabVIEW${q}</BasePath>")
+            [void]$sb.AppendLine("`t`t`t<RelativePath>${q}$rel${q}</RelativePath>")
+            [void]$sb.AppendLine("`t`t`t<Selected>TRUE</Selected>")
+            [void]$sb.AppendLine("`t`t`t<Controls>")
+            [void]$sb.AppendLine("`t`t`t</Controls>")
+            [void]$sb.AppendLine("`t`t</Test>")
+        }
+        [void]$sb.Append("`t</TestConfigData>")
+        $newBlock = $sb.ToString()
+
+        # Replace the template's <TestConfigData>...</TestConfigData> wholesale
+        # (substring, not regex, to avoid metacharacter pitfalls in test paths).
+        $startTag = '<TestConfigData>'
+        $endTag   = '</TestConfigData>'
+        $si = $ConfigXml.IndexOf($startTag)
+        $ei = $ConfigXml.IndexOf($endTag)
+        if ($si -ge 0 -and $ei -gt $si) {
+            $ConfigXml = $ConfigXml.Substring(0, $si) + $newBlock + $ConfigXml.Substring($ei + $endTag.Length)
+            Write-Host ("  Test suite : selected {0} tests from {1}" -f $llbs.Count, $testsRoot)
         } else {
-            Write-Warning "  Test suite : no *.llb tests found under '$testsRoot' - using committed fallback tests"
+            Write-Warning "  Test suite : could not locate <TestConfigData> in template - using committed fallback tests"
         }
     } else {
-        Write-Warning "  Test suite : '$testsRoot' not found - using committed fallback tests"
+        Write-Warning "  Test suite : no VI Analyzer test libraries found under LabVIEW - using committed fallback tests"
+        # Diagnostic (only on the not-found path): surface the real layout so the
+        # correct location can be wired into the probe list above.
+        Write-Host "  Test suite : (diagnostic) _tests folders under $lvDir :"
+        Get-ChildItem -LiteralPath $lvDir -Recurse -Directory -Filter '_tests' -ErrorAction SilentlyContinue |
+            Select-Object -First 20 |
+            ForEach-Object { Write-Host ("      {0}" -f $_.FullName) }
     }
 } catch {
     Write-Warning ("  Test suite enumeration failed (" + $_.Exception.Message + ") - using committed fallback tests")
