@@ -80,6 +80,16 @@
     .status{font-size:.82em;color:var(--fg-muted);margin-top:8px;min-height:1.2em}
     .err{color:#cf222e}
     .ok{color:var(--accent)}
+    .tokpanel{border:1px solid var(--border);border-radius:8px;padding:14px 16px;background:var(--surface2);margin:0 0 14px}
+    .tokpanel h3{font-size:.9em;margin:0 0 8px}
+    .tokpanel ol{font-size:.84em;color:var(--fg-muted);margin:0 0 10px;padding-left:20px;line-height:1.7}
+    .tokpanel .note{font-size:.78em;color:var(--fg-muted);margin:0 0 10px}
+    .tokpanel .tokrow{display:flex;gap:8px;flex-wrap:wrap}
+    .tokpanel input{flex:1 1 240px;min-width:180px;padding:8px 10px;background:var(--bg);color:var(--fg);
+         border:1px solid var(--border);border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:.82em}
+    #insNext{margin-top:14px}
+    details.altinstall>summary{cursor:pointer;font-size:.86em;color:var(--link);user-select:none}
+    details.altinstall>summary:hover{text-decoration:underline}
   </style>
 </head>
 <body>
@@ -94,7 +104,7 @@
 
     <section>
       <h2>1. Your repository</h2>
-      <p class="hint">Optional — the installer infers this from your git remote. Used to tailor the bundle and the printed commands.</p>
+      <p class="hint">Where to install. Required for the one-click install; the command-line option can also infer it from your git remote.</p>
       <div class="row">
         <div class="field">
           <label class="fl" for="repo">Target repo (owner/name)</label>
@@ -122,26 +132,61 @@
 
     <section>
       <h2>3. Install</h2>
-      <p class="hint">Run this from the root of your repository. It only writes files into your working tree — review with <code class="inl">git diff</code> before committing.</p>
-      <div class="tabs" id="tabs">
-        <div class="tab active" data-tab="bash">macOS / Linux / Git Bash</div>
-        <div class="tab" data-tab="pwsh">Windows PowerShell</div>
+      <p class="hint">Let the configurator open a pull request that adds these files to your repository &mdash; nothing to download, unzip, or commit by hand. The first time, you paste a one-time fine-grained token; the panel walks you through creating it with the permissions pre-filled.</p>
+
+      <div class="tokpanel" id="insTokPanel" style="display:none">
+        <h3>One-time setup &mdash; a token to open the install pull request</h3>
+        <ol>
+          <li><a id="insTokLink" target="_blank" rel="noopener">Create a fine-grained token &#8599;</a> &mdash; the required permissions are pre-filled.</li>
+          <li><strong>Repository access</strong> &rarr; Only select repositories &rarr; add <code class="inl" id="insTokRepo">your-org/your-repo</code>.</li>
+          <li>Confirm <strong>Permissions</strong>: <strong>Contents</strong>, <strong>Pull requests</strong>, and <strong>Workflows</strong> each set to <strong>Read and write</strong> (Workflows is what lets the install add files under <code class="inl">.github/workflows/</code>).</li>
+          <li>Generate, then paste it below.</li>
+        </ol>
+        <p class="note">Stored only in this browser (localStorage); sent only to api.github.com &mdash; never to the page or to CI. Revoke it any time once the pull request is open.</p>
+        <div class="tokrow">
+          <input id="insTokInput" type="password" autocomplete="off" placeholder="github_pat_&hellip;">
+          <button type="button" class="primary" id="insTokSave">Save &amp; install</button>
+          <button type="button" class="ghost" id="insTokCancel">Cancel</button>
+        </div>
       </div>
-      <div class="codebox">
-        <button class="copy" id="copyCmd">Copy</button>
-        <pre id="cmd"></pre>
-      </div>
+
       <div class="actions">
-        <button class="primary" id="download">Download bundle (.zip)</button>
-        <button class="ghost" id="viewInstaller">View installer source</button>
-        <span class="status" id="dlStatus"></span>
+        <button class="primary" id="installBtn">&#11014; Install into your repo</button>
+        <button class="ghost" id="insTokForget" style="display:none" title="Remove the token saved in this browser">Forget token</button>
+        <span class="status" id="insStatus"></span>
       </div>
+
+      <ol class="steps" id="insNext" style="display:none">
+        <li>Review and merge pull request <a id="insPrLink" target="_blank" rel="noopener">#&hellip;</a>.</li>
+        <li>Set <strong>Workflow permissions</strong> to <em>Read and write</em> (<a id="insPermLink" target="_blank" rel="noopener">Settings &rsaquo; Actions &rsaquo; General</a>).</li>
+        <li>After the first run publishes the <code class="inl">gh-pages</code> branch, enable <strong>GitHub Pages</strong> from it (<a id="insPagesLink" target="_blank" rel="noopener">Settings &rsaquo; Pages</a>).</li>
+      </ol>
+
+      <details class="altinstall">
+        <summary>Other ways to install (command line or download)</summary>
+        <div style="margin-top:12px">
+          <p class="hint">Run this from the root of your repository. It only writes files into your working tree &mdash; review with <code class="inl">git diff</code> before committing.</p>
+          <div class="tabs" id="tabs">
+            <div class="tab active" data-tab="bash">macOS / Linux / Git Bash</div>
+            <div class="tab" data-tab="pwsh">Windows PowerShell</div>
+          </div>
+          <div class="codebox">
+            <button class="copy" id="copyCmd">Copy</button>
+            <pre id="cmd"></pre>
+          </div>
+          <div class="actions">
+            <button class="primary" id="download">Download bundle (.zip)</button>
+            <button class="ghost" id="viewInstaller">View installer source</button>
+            <span class="status" id="dlStatus"></span>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section>
       <h2>4. Finish setup</h2>
       <ol class="steps">
-        <li>Commit and push the added <code class="inl">.github/</code> files.</li>
+        <li>Merge the install pull request (or, if you used the manual option, commit the added <code class="inl">.github/</code> files).</li>
         <li>Enable <strong>GitHub Pages</strong> from the <code class="inl">gh-pages</code> branch (Settings &rsaquo; Pages).</li>
         <li>Set <strong>Workflow permissions</strong> to <em>Read and write</em> (Settings &rsaquo; Actions &rsaquo; General).</li>
         <li id="varsStep">Optionally pin settings as Actions variables (shown after you choose options).</li>
@@ -166,6 +211,7 @@
     const $ = (id) => document.getElementById(id);
     const csv = (set) => [...set].join(",");
     const ext = (p) => { const i = p.lastIndexOf("."); return i < 0 ? "" : p.slice(i).toLowerCase(); };
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
     async function loadCatalog() {
       const candidates = ["./catalog.json", "./labview-ci/catalog.json",
@@ -308,6 +354,9 @@
       varsHint();
       const noneReal = [...selected].filter(id => { const c = byId(id); return c && c.status !== "planned"; }).length === 0;
       $("download").disabled = noneReal;
+      const ib = $("installBtn"); if (ib) ib.disabled = noneReal;
+      const tl = $("insTokLink"); if (tl) tl.href = tokenUrl();
+      const tr = $("insTokRepo"); if (tr) tr.textContent = $("repo").value.trim() || "your-org/your-repo";
     }
 
     // ---- bundle download --------------------------------------------------
@@ -384,6 +433,211 @@
       status.textContent = `Bundle ready (${total} files). Unzip at your repo root, review, and commit.`;
     }
 
+    // ---- one-click install into the target repo (no download) ------------
+    // Mirrors the bundle build, but instead of zipping it commits the resolved
+    // files to a new branch on the user's repo via the Git Data API and opens a
+    // pull request. Needs a fine-grained token with Contents + Pull requests +
+    // Workflows (write): the workflow files require the Workflows permission.
+    const INSTALL_TOK_KEY = "lvci_install_token";
+    const INSTALL_BRANCH = "ci/install-labview-ci";
+    const getInsTok = () => { try { return localStorage.getItem(INSTALL_TOK_KEY) || ""; } catch (_) { return ""; } };
+    const setInsTok = (v) => { try { localStorage.setItem(INSTALL_TOK_KEY, v); } catch (_) {} };
+    const clearInsTok = () => { try { localStorage.removeItem(INSTALL_TOK_KEY); } catch (_) {} };
+
+    // Pre-filled fine-grained token creation link (GitHub honours these query
+    // params), so the user lands on the form with the right scopes selected.
+    function tokenUrl() {
+      const repo = $("repo").value.trim();
+      const owner = repo.includes("/") ? repo.split("/")[0] : "";
+      const p = new URLSearchParams({
+        name: "LabVIEW CI installer",
+        description: "Opens a pull request that installs the LabVIEW CI pipeline" + (repo ? " into " + repo : "") + ".",
+        contents: "write", pull_requests: "write", workflows: "write"
+      });
+      if (owner) p.set("target_name", owner);
+      return "https://github.com/settings/personal-access-tokens/new?" + p.toString();
+    }
+
+    function setInsStatus(html, kind) { const s = $("insStatus"); if (!s) return; s.className = "status" + (kind ? " " + kind : ""); s.innerHTML = html || ""; }
+    function refreshInsForget() { const f = $("insTokForget"); if (f) f.style.display = getInsTok() ? "" : "none"; }
+    function showInsTokPanel() { const p = $("insTokPanel"); if (p) { p.style.display = ""; const i = $("insTokInput"); if (i) i.focus(); } }
+    function hideInsTokPanel() { const p = $("insTokPanel"); if (p) p.style.display = "none"; }
+
+    // Authenticated call to the target repo (token attached). Source-repo reads
+    // stay unauthenticated on purpose: the install token is scoped to the target.
+    function gh(path, opts) {
+      opts = opts || {};
+      const headers = Object.assign({ "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" }, opts.headers || {});
+      const tok = getInsTok();
+      if (tok) headers["Authorization"] = "Bearer " + tok;
+      let body = opts.body;
+      if (body && typeof body !== "string") { body = JSON.stringify(body); headers["Content-Type"] = "application/json"; }
+      return fetch("https://api.github.com" + path, { method: opts.method || "GET", headers, body, cache: "no-store" });
+    }
+    async function ghJson(resp) {
+      if (resp.ok) return resp.status === 204 ? null : resp.json();
+      let msg = ""; try { msg = (await resp.json()).message || ""; } catch (_) {}
+      const err = new Error(msg || ("HTTP " + resp.status));
+      err.status = resp.status; err.ghMessage = msg;
+      throw err;
+    }
+    function b64bytes(bytes) {
+      let bin = ""; const CH = 0x8000;
+      for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+      return btoa(bin);
+    }
+    const b64text = (str) => b64bytes(new TextEncoder().encode(str));
+
+    function installBusy(b) {
+      const ib = $("installBtn"); if (!ib) return;
+      const noneReal = [...selected].filter(id => { const c = byId(id); return c && c.status !== "planned"; }).length === 0;
+      ib.disabled = b || noneReal;
+      ib.innerHTML = b ? "Installing&hellip;" : "&#11014; Install into your repo";
+    }
+
+    function installPrBody(acts, osList, ver, fileCount) {
+      const s = source();
+      return [
+        "## LabVIEW CI pipeline", "",
+        "Opened by the **LabVIEW CI configurator** to add a containerized CI pipeline to this repository.", "",
+        "| | |", "|---|---|",
+        "| LabVIEW version | `" + ver + "` |",
+        "| Platforms | " + (osList.join(", ") || "windows, linux") + " |",
+        "| Capabilities | " + (acts.join(", ") || "dashboard") + " |",
+        "| Files added | " + fileCount + " |",
+        "| Tooling source | `" + s.repo + "@" + s.ref + "` |", "",
+        "### After you merge", "",
+        "1. Set **Workflow permissions** to *Read and write* (Settings \u203a Actions \u203a General).",
+        "2. After the first run publishes the `gh-pages` branch, enable **GitHub Pages** from it (Settings \u203a Pages).",
+        "3. Open a pull request that changes a VI \u2014 the pipeline runs and reports back on the dashboard.", "",
+        "Change any of these choices later from **\u2699 Configure Workers** on the dashboard.", ""
+      ].join("\n");
+    }
+
+    function installSuccess(pr, repo) {
+      setInsStatus(`&#10003; Done \u2014 opened pull request <a href="${esc(pr.html_url)}" target="_blank" rel="noopener">#${pr.number}</a> in <code class="inl">${esc(repo)}</code>.`, "ok");
+      const next = $("insNext"); if (next) next.style.display = "";
+      const pl = $("insPrLink"); if (pl) { pl.href = pr.html_url; pl.textContent = "#" + pr.number; }
+      const perm = $("insPermLink"); if (perm) perm.href = `https://github.com/${repo}/settings/actions`;
+      const pages = $("insPagesLink"); if (pages) pages.href = `https://github.com/${repo}/settings/pages`;
+    }
+
+    function installError(e, repo) {
+      const st = e && e.status;
+      const gm = e && e.ghMessage ? ` <span style="opacity:.8">(${esc(e.ghMessage)})</span>` : "";
+      if (st === 401) {
+        clearInsTok(); refreshInsForget(); showInsTokPanel();
+        return "That token was rejected (401). Create a new one above and paste it.";
+      }
+      if (st === 403) return `<strong>403</strong> \u2014 the token is missing a permission. It needs <strong>Contents</strong>, <strong>Pull requests</strong>, and <strong>Workflows</strong> set to <strong>Read and write</strong> for <code class="inl">${esc(repo)}</code>.` + gm;
+      if (st === 404) return `<strong>404</strong> \u2014 the token cannot see <code class="inl">${esc(repo)}</code>. On the token, set <strong>Repository access &rarr; Only select repositories</strong> and add this repo.` + gm;
+      if (st === 422 && /workflow/i.test((e && e.ghMessage) || "")) return `The commit was refused because the token lacks the <strong>Workflows</strong> permission (required to add files under <code class="inl">.github/workflows/</code>). Add <strong>Workflows: Read and write</strong> to the token, then retry.` + gm;
+      return (e && e.message ? esc(e.message) : "Install failed.") + gm;
+    }
+
+    async function installToRepo() {
+      const repo = $("repo").value.trim();
+      if (!repo.includes("/")) { setInsStatus("Enter your target repository (owner/name) in step 1 first.", "err"); const r = $("repo"); if (r) r.focus(); return; }
+      if (!getInsTok()) { showInsTokPanel(); return; }
+      const owner = repo.split("/")[0];
+      const s = source();
+      installBusy(true);
+      setInsStatus("Preparing&hellip;", null);
+      try {
+        const osList = [...osSel];
+        const wanted = resolveFiles([...selected], osList);
+        const subs = buildSubs();
+
+        // Enumerate the source tree (public; unauthenticated) to expand dir entries.
+        setInsStatus("Listing tooling files&hellip;", null);
+        const tree = await fetch(`https://api.github.com/repos/${s.repo}/git/trees/${s.ref}?recursive=1`, { cache: "no-store" })
+          .then(r => { if (!r.ok) throw new Error("Could not list the tooling files (GitHub API rate limit?). Try the command-line option below."); return r.json(); });
+        const allPaths = (tree.tree || []).filter(t => t.type === "blob").map(t => t.path);
+        const paths = new Set();
+        wanted.forEach(entry => {
+          if (entry.endsWith("/")) allPaths.filter(p => p.startsWith(entry)).forEach(p => paths.add(p));
+          else if (allPaths.includes(entry)) paths.add(entry);
+        });
+        if (!paths.size) throw new Error("No files resolved for the selected capabilities.");
+
+        // Fetch each file from raw (public) and apply branding substitutions.
+        const files = [];
+        let n = 0; const total = paths.size;
+        for (const path of paths) {
+          setInsStatus(`Fetching ${++n}/${total}: ${esc(path.split("/").pop())}`, null);
+          const resp = await fetch(rawUrl(path), { cache: "no-store" });
+          if (!resp.ok) continue;
+          if (shouldSub(path)) files.push({ path, content: applySubs(await resp.text(), subs), isText: true });
+          else files.push({ path, bytes: new Uint8Array(await resp.arrayBuffer()), isText: false });
+        }
+        files.push({ path: ".github/labview-ci.yml", content: manifestYaml([...selected], osList, $("version").value), isText: true });
+
+        // Resolve the target repo's default branch + base tree.
+        setInsStatus("Reading your repository&hellip;", null);
+        const meta = await ghJson(await gh(`/repos/${repo}`));
+        const branch = meta && meta.default_branch;
+        if (!branch) throw new Error("Your repository has no commits yet. Push an initial commit (e.g. a README) first, then install.");
+        const headRef = await ghJson(await gh(`/repos/${repo}/git/ref/heads/${encodeURIComponent(branch)}`));
+        const headSha = headRef.object.sha;
+        const baseCommit = await ghJson(await gh(`/repos/${repo}/git/commits/${headSha}`));
+        const baseTree = baseCommit.tree.sha;
+
+        // Upload every file as a blob, then assemble one tree + commit.
+        const treeItems = []; n = 0;
+        for (const f of files) {
+          setInsStatus(`Uploading ${++n}/${files.length}: ${esc(f.path.split("/").pop())}`, null);
+          const content = f.isText ? b64text(f.content) : b64bytes(f.bytes);
+          const blob = await ghJson(await gh(`/repos/${repo}/git/blobs`, { method: "POST", body: { content, encoding: "base64" } }));
+          treeItems.push({ path: f.path, mode: "100644", type: "blob", sha: blob.sha });
+        }
+
+        setInsStatus("Creating the commit&hellip;", null);
+        const newTree = await ghJson(await gh(`/repos/${repo}/git/trees`, { method: "POST", body: { base_tree: baseTree, tree: treeItems } }));
+        const acts = [...selected].filter(id => { const c = byId(id); return c && c.status !== "planned"; });
+        const commitMsg = `ci: install LabVIEW CI pipeline (${acts.join(", ") || "dashboard"})\n\nAdded by the LabVIEW CI configurator from ${s.repo}@${s.ref}.`;
+        const commit = await ghJson(await gh(`/repos/${repo}/git/commits`, { method: "POST", body: { message: commitMsg, tree: newTree.sha, parents: [headSha] } }));
+
+        // Create the install branch, or fast-forward it if a prior attempt left one.
+        setInsStatus("Pushing the install branch&hellip;", null);
+        const createRef = await gh(`/repos/${repo}/git/refs`, { method: "POST", body: { ref: `refs/heads/${INSTALL_BRANCH}`, sha: commit.sha } });
+        if (!createRef.ok) {
+          let jm = ""; try { jm = (await createRef.clone().json()).message || ""; } catch (_) {}
+          if (/already exists/i.test(jm)) {
+            await ghJson(await gh(`/repos/${repo}/git/refs/heads/${INSTALL_BRANCH}`, { method: "PATCH", body: { sha: commit.sha, force: true } }));
+          } else {
+            await ghJson(createRef); // throws a typed error (e.g. 422 missing Workflows permission)
+          }
+        }
+
+        // Open the pull request (or surface one that already exists for the branch).
+        setInsStatus("Opening the pull request&hellip;", null);
+        const prResp = await gh(`/repos/${repo}/pulls`, { method: "POST", body: {
+          title: "Add LabVIEW CI pipeline", head: INSTALL_BRANCH, base: branch,
+          body: installPrBody(acts, osList, $("version").value, files.length) } });
+        let pr;
+        if (prResp.ok) { pr = await prResp.json(); }
+        else {
+          if (prResp.status === 422) {
+            const existing = await ghJson(await gh(`/repos/${repo}/pulls?state=open&head=${owner}:${INSTALL_BRANCH}`));
+            pr = Array.isArray(existing) && existing[0];
+          }
+          if (!pr) await ghJson(prResp); // still nothing -> throw a typed error
+        }
+        installSuccess(pr, repo);
+      } catch (e) {
+        setInsStatus(installError(e, repo), "err");
+      } finally {
+        installBusy(false);
+      }
+    }
+
+    function saveInsTokAndInstall() {
+      const i = $("insTokInput"); const v = (i && i.value || "").trim();
+      if (!v) { if (i) i.focus(); return; }
+      setInsTok(v); refreshInsForget(); hideInsTokPanel(); if (i) i.value = "";
+      installToRepo();
+    }
+
     // ---- wiring ----------------------------------------------------------
     function wire() {
       document.querySelectorAll("#osToggle input").forEach(cb => {
@@ -408,6 +662,11 @@
         catch (e) { const st = $("dlStatus"); st.className = "status err"; st.textContent = e.message || String(e); }
         finally { $("download").disabled = false; }
       });
+      $("installBtn").addEventListener("click", installToRepo);
+      $("insTokSave").addEventListener("click", saveInsTokAndInstall);
+      $("insTokCancel").addEventListener("click", hideInsTokPanel);
+      $("insTokForget").addEventListener("click", () => { clearInsTok(); refreshInsForget(); setInsStatus("Token removed from this browser.", null); });
+      const _iti = $("insTokInput"); if (_iti) _iti.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveInsTokAndInstall(); } });
     }
 
     (async function init() {
@@ -419,7 +678,7 @@
           `If you are viewing this locally, serve the folder over HTTP.</p></section>`);
         return;
       }
-      renderVersions(); renderCaps(); wire(); update();
+      renderVersions(); renderCaps(); wire(); update(); refreshInsForget();
 
       // Central-hosted model: a consumer dashboard can deep-link here with
       // ?repo=owner/name to pre-fill the target. Installs still reference the
