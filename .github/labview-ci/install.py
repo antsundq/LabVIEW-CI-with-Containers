@@ -482,7 +482,7 @@ def thin_install(catalog: dict, target_root: Path, owner: str | None, name: str 
     return 0
 
 
-def consumer_dashboard_workflow(catalog: dict) -> str:
+def consumer_dashboard_workflow(catalog: dict, branch: str = "main") -> str:
     """Thin dashboard workflow for a vendored consumer.
 
     The dashboard generator lives in actions/dashboard, a LOCAL path that only
@@ -496,6 +496,7 @@ def consumer_dashboard_workflow(catalog: dict) -> str:
     src = catalog.get("source", {}) or {}
     src_repo = src.get("repo", "") or ""
     ref = src.get("ref", "") or "main"
+    br = branch or "main"
     return (
         "# CI Dashboard \u2014 GitHub Pages. Thin caller installed by .github/labview-ci/install.py.\n"
         "# The dashboard build logic lives in the shared composite action, pulled at the tooling\n"
@@ -504,6 +505,13 @@ def consumer_dashboard_workflow(catalog: dict) -> str:
         "# when you opt in. Owns the triggers + the Pages deploy.\n"
         "name: CI Dashboard \u2014 GitHub Pages\n\n"
         "on:\n"
+        "  # Build on the install merge + whenever the config changes, so the dashboard\n"
+        "  # publishes itself the first time without waiting for the hourly schedule.\n"
+        "  push:\n"
+        "    branches: [" + br + "]\n"
+        "    paths:\n"
+        "      - '.github/labview-ci.yml'\n"
+        "      - '.github/workflows/dashboard-pages.yml'\n"
         "  status:\n"
         "  workflow_run:\n"
         "    workflows:\n"
@@ -673,7 +681,7 @@ def main() -> int:
     if any(f.endswith("dashboard-pages.yml") for f in file_list) and not args.dry_run:
         dpath = target_root / ".github" / "workflows" / "dashboard-pages.yml"
         if dpath.exists():
-            dpath.write_text(consumer_dashboard_workflow(catalog), encoding="utf-8")
+            dpath.write_text(consumer_dashboard_workflow(catalog, branch), encoding="utf-8")
             log("  rewrite (thin)  .github/workflows/dashboard-pages.yml")
 
     write_manifest(target_root, catalog, [a for a in activities if a in
