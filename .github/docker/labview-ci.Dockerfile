@@ -43,31 +43,16 @@ ARG CI_WORKER_VERSION=dev
 # .vipc staged the VIPM hook below is a no-op.
 COPY .github/labview/vipm/ C:/vipm/
 
-# Install the VI Analyzer support package and report whether its default TEST
-# SUITE is on disk. IMPORTANT FINDING: NI's prebuilt nationalinstruments/labview
-# base image ships the VI Analyzer ENGINE but NOT the ~90 default test libraries
-# (project\_VI Analyzer\_tests\**\*.llb). The ni-viawin-labview-support package is
-# registered as installed; reinstalling it from the feed downloads ~7 MB but lays
-# down 0 test files ("0 bytes of additional disk space will be used"), so the tests
-# are not obtainable in-container this way — they were stripped from the slim base
-# image and live in the full LabVIEW core install. The analyzer therefore loads but
-# runs 0 tests until the worker is built with the test suite present (tracked
-# separately). This step is NON-FATAL: mass compile, VIDiff and snapshots work on
-# this worker regardless, so a missing analyzer suite must not block the whole
-# image. It logs the on-disk test count so the gap is visible in the build.
-RUN $ErrorActionPreference = 'Continue'; `
-    if (-not (Get-Command nipkg -ErrorAction SilentlyContinue)) { throw 'nipkg was not found in the LabVIEW base image.' }; `
-    nipkg feed-add --name=$env:NIPM_FEED_NAME $env:NIPM_FEED_URL 2>&1 | Out-Host; `
-    nipkg update 2>&1 | Out-Host; `
-    nipkg install --accept-eulas -y $env:VIA_SUPPORT_PACKAGE 2>&1 | Out-Host; `
-    $lvDir = (Get-ChildItem 'C:\Program Files\National Instruments' -Directory -Filter 'LabVIEW *' | Sort-Object Name -Descending | Select-Object -First 1).FullName; `
-    $testsDir = Join-Path $lvDir 'project\_VI Analyzer\_tests'; `
-    $count = if (Test-Path $testsDir) { @(Get-ChildItem -LiteralPath $testsDir -Recurse -Filter '*.llb' -ErrorAction SilentlyContinue).Count } else { 0 }; `
-    if ($count -lt 1) { `
-      Write-Host ('WARNING: VI Analyzer default test suite is NOT present under {0} (0 test libraries). The analyzer engine is installed but the prebuilt base image does not ship the test VIs, so VI Analyzer runs will report 0 tests. Mass compile / VIDiff / snapshots are unaffected.' -f $testsDir); `
-    } else { `
-      Write-Host ('VI Analyzer test suite present: {0} test libraries under {1}.' -f $count, $testsDir); `
-    }; `
+# Install the VI Analyzer support package (ni-viawin-labview-support). This package
+# makes the full default VI Analyzer test configuration available to the analyzer,
+# which run-vi-analyzer.ps1 invokes in "directory mode" (passing the workspace
+# directory as -ConfigPath runs that full default suite against every VI). nipkg
+# install is idempotent — if the package is already present in the base image it
+# exits cleanly.
+RUN if (-not (Get-Command nipkg -ErrorAction SilentlyContinue)) { throw 'nipkg was not found in the LabVIEW base image.' }; `
+    nipkg feed-add --name=$env:NIPM_FEED_NAME $env:NIPM_FEED_URL; `
+    nipkg update; `
+    nipkg install --accept-eulas -y $env:VIA_SUPPORT_PACKAGE; `
     if (Test-Path 'C:\ProgramData\National Instruments\NI Package Manager\cache') { `
       Remove-Item -Path 'C:\ProgramData\National Instruments\NI Package Manager\cache\*' -Force -Recurse -ErrorAction SilentlyContinue `
     }
