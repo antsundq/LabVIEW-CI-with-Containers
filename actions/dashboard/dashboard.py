@@ -72,6 +72,31 @@ LV_SOURCE_EXTS = (
     '.lvproj', '.xctl', '.xnode', '.vipc', '.vip', '.llb', '.mnu', '.lvtest',
 )
 
+# ── "Run" targets for empty cells ───────────────────────────────
+# Each capability column maps to the consumer-repo workflow(s) that re-run it
+# for one commit, so an empty cell can offer a one-click "run". Entries with
+# both 'windows' and 'linux' drive the platform picker; a lone 'all' key is a
+# single-target capability (no picker). The inputs are the workflow_dispatch
+# fields, with {sha}/{parent} placeholders filled per row in the browser. These
+# follow the standard installed workflow names, so they resolve in the consumer
+# repo (source + hybrid installs); a thin consumer without them simply gets a
+# link that 404s, which is why the affordance is unobtrusive.
+RUN_TARGETS = {
+    'masscompile': {'label': 'Mass Compile', 'platforms': {
+        'windows': {'wf': 'masscompile-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}},
+        'linux':   {'wf': 'masscompile-linux-container.yml',   'inputs': {'commit_sha': '{sha}'}}}},
+    'vi-analyzer': {'label': 'VI Analyzer', 'platforms': {
+        'windows': {'wf': 'run-vi-analyzer-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}},
+        'linux':   {'wf': 'run-vi-analyzer-linux-container.yml',   'inputs': {'commit_sha': '{sha}'}}}},
+    'vidiff': {'label': 'VIDiff', 'platforms': {
+        'windows': {'wf': 'vidiff-windows-container.yml', 'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}},
+        'linux':   {'wf': 'vidiff-linux-container.yml',   'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}}}},
+    'snapshots': {'label': 'VI Snapshots', 'platforms': {
+        'all': {'wf': 'vi-snapshots.yml', 'inputs': {'mode': 'head'}}}},
+}
+import json as _json
+run_targets_json = _json.dumps(RUN_TARGETS)
+
 import datetime as _dt
 def _stale_pending(s):
     # A 'pending' status older than 2h is almost certainly orphaned
@@ -117,6 +142,7 @@ for c in commits_data:
     msg     = c['commit']['message'].splitlines()[0][:80]
     author  = c['commit']['author']['name']
     date    = c['commit']['author']['date']
+    parent  = (c.get('parents') or [{}])[0].get('sha', '')
 
     # Classify the revision by scope. A "project change" touches at least
     # one LabVIEW source file that lives in the project itself — i.e. NOT
@@ -164,6 +190,17 @@ for c in commits_data:
 
     EMPTY_CELL = '<td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>'
 
+    def run_cell(cap):
+        # An empty *project* cell offers a one-click "run": a subtle play glyph
+        # that opens the dispatch dialog for this capability + commit. Columns
+        # with no re-run workflow (or unknown caps) fall back to a plain dash.
+        if cap not in RUN_TARGETS:
+            return EMPTY_CELL
+        return ('<td style="text-align:center">'
+                f'<a href="#" class="cidash-run" data-cap="{cap}" data-sha="{sha}" '
+                f'data-parent="{parent}" data-short="{short}" '
+                f'title="Run {RUN_TARGETS[cap]["label"]} for commit {short}">&#9655;</a></td>')
+
     def fresh_pending(*contexts):
         # Return the newest actively-running (fresh 'pending') status among the
         # candidate contexts, or None. Detected separately from pick_status so a
@@ -193,7 +230,7 @@ for c in commits_data:
                 '<span class="run-badge" title="Running — click to view progress">'
                 f'{body}</span></td>')
 
-    def badge(label, *contexts, url_override=None):
+    def badge(label, *contexts, url_override=None, cap=None):
         if not is_project:
             return EMPTY_CELL
         run = fresh_pending(*contexts)
@@ -201,7 +238,7 @@ for c in commits_data:
             return running_cell(label, run.get('target_url', ''))
         s = pick_status(*contexts)
         if not s:
-            return EMPTY_CELL
+            return run_cell(cap) if cap else EMPTY_CELL
         color  = {'success':'#2ea043','failure':'#da3633','pending':'#9a6700','error':'#da3633'}.get(s['state'],'#555')
         emoji  = {'success':'✅','failure':'❌','pending':'⏳','error':'⚠️'}.get(s['state'],'?')
         url    = url_override or s.get('target_url','')
@@ -256,15 +293,15 @@ for c in commits_data:
                         f'style="background:{_col};color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em">'
                         f'<a href="{_url}" style="color:inherit">{_emoji} {_pct}%</a></span></td>')
         else:
-            mc_badge = badge('compile', 'CI / Mass Compile')
+            mc_badge = badge('compile', 'CI / Mass Compile', cap='masscompile')
     # Consider both analyzer platforms (mirrors the diff badge): a revision
     # analyzed only on Linux still surfaces its VI Analyzer result instead of
     # showing nothing because the Windows-only context is absent.
-    via_badge = badge('analyze',   'CI / VI Analyzer', 'CI / VI Analyzer (Linux)')
+    via_badge = badge('analyze',   'CI / VI Analyzer', 'CI / VI Analyzer (Linux)', cap='vi-analyzer')
     # The diff badge opens the unified VI Browser filtered to this commit's
     # changed VIs (each links to its diff report), rather than a separate table.
     diff_badge= badge('diff',      'CI / VIDiff (windows)', 'CI / VIDiff (linux)',
-                       url_override=f'{pages_url}/vi-snapshots/index.html?sha={sha}&changed=1')
+                       url_override=f'{pages_url}/vi-snapshots/index.html?sha={sha}&changed=1', cap='vidiff')
     # Snapshots column: per-platform count of VIs rendered for this revision
     # (from each container's VIDiff changes.json), each a deep link into the VI
     # Browser with that platform preselected and the view filtered to changes.
@@ -276,7 +313,7 @@ for c in commits_data:
         if _snap_run is not None:
             snap_badge = running_cell('snapshots', _snap_run.get('target_url', ''))
         elif not _counts:
-            snap_badge = '<td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>'
+            snap_badge = run_cell('snapshots')
         else:
             _links = []
             for _plat, _label in (('windows', 'Win'), ('linux', 'Linux')):
@@ -428,6 +465,104 @@ if lvci_version:
         '}).catch(function(){});})();</scr' + 'ipt>'
     )
 
+# ── "Run this cell" dialog ──────────────────────────────────
+# Styling for the subtle play glyph shown in empty project cells.
+run_dialog_css = (
+    '.cidash-run{display:inline-block;color:var(--fg-muted);font-size:.95em;'
+    'line-height:1;text-decoration:none;opacity:.5;transition:opacity .12s,color .12s}'
+    '.cidash-run:hover{opacity:1;color:var(--link);text-decoration:none}'
+    'tr:hover .cidash-run{opacity:.85}'
+)
+# Modal + controller. Clicking a cell's play glyph opens this, lets the user
+# pick platform(s) for multi-platform capabilities, and surfaces a copyable
+# `gh workflow run` command (pre-filled with the commit SHA) plus a link to the
+# workflow's Run page — token-free, using the user's own GitHub auth.
+run_dialog = (r"""
+  <div id="cidash-run-modal" onclick="if(event.target===this)cidashRunClose()" style="display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55)">
+    <div role="dialog" aria-modal="true" aria-labelledby="cidash-run-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <strong id="cidash-run-title" style="font-size:.95em">Run</strong>
+        <button onclick="cidashRunClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
+      </div>
+      <div id="cidash-run-body" style="padding:16px"></div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var RT = __RUN_TARGETS__;
+    var REPO = "__REPO__";
+    var BRANCH = "__BRANCH__";
+    var state = {cap:null, sha:'', parent:'', short:''};
+    function $(id){ return document.getElementById(id); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function fill(t){ return String(t).replace(/\{sha\}/g, state.sha).replace(/\{parent\}/g, state.parent||''); }
+    function ghCmd(wf, inputs){
+      var s = "gh workflow run " + wf + " --ref " + BRANCH;
+      Object.keys(inputs).forEach(function(k){ s += " -f " + k + "=" + fill(inputs[k]); });
+      return s;
+    }
+    function actionsUrl(wf){ return "https://github.com/" + REPO + "/actions/workflows/" + wf; }
+    function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+    function selectedPlats(def){
+      var keys = Object.keys(def.platforms);
+      if (keys.length === 1) return keys;
+      var boxes = keys.map(function(k){ return $("cidash-plat-"+k); });
+      if (boxes.every(function(b){ return !b; })) return keys.slice();
+      return keys.filter(function(k){ var b = $("cidash-plat-"+k); return b && b.checked; });
+    }
+    function render(){
+      var def = RT[state.cap]; if(!def) return;
+      var keys = Object.keys(def.platforms);
+      var multi = keys.length > 1;
+      var sel = selectedPlats(def);
+      var cmds = sel.map(function(k){ return ghCmd(def.platforms[k].wf, def.platforms[k].inputs); });
+      var h = '';
+      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em">Enqueue the <strong>'+esc(def.label)+'</strong> run for commit <code style="font-family:monospace">'+esc(state.short)+'</code>. Uses your own GitHub auth &mdash; no tokens in the browser.</p>';
+      if (multi){
+        h += '<div style="display:flex;gap:18px;margin:0 0 14px;font-size:.9em">';
+        keys.forEach(function(k){
+          h += '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="cidash-plat" id="cidash-plat-'+k+'" '+(sel.indexOf(k)>=0?'checked':'')+' style="accent-color:var(--link)">'+esc(cap(k))+'</label>';
+        });
+        h += '</div>';
+      }
+      if (!cmds.length){
+        h += '<p style="color:#bb8009;font-size:.85em;margin:0">Select at least one platform.</p>';
+      } else {
+        h += '<div style="position:relative;margin:0 0 12px"><pre id="cidash-run-cmd" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8em;white-space:pre-wrap;word-break:break-word">'+esc(cmds.join("\n"))+'</pre>';
+        h += '<button onclick="cidashRunCopy()" style="position:absolute;top:8px;right:8px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 10px;font-size:.74em;cursor:pointer">Copy</button></div>';
+        h += '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.85em">';
+        sel.forEach(function(k){
+          h += '<a href="'+actionsUrl(def.platforms[k].wf)+'" target="_blank" rel="noopener" style="color:var(--link)">Open '+esc(multi?cap(k):def.label)+' workflow &#8599;</a>';
+        });
+        h += '</div>';
+        h += '<p style="color:var(--fg-muted);font-size:.78em;margin:14px 0 0">Run the command with the <a href="https://cli.github.com/" target="_blank" rel="noopener" style="color:var(--link)">GitHub CLI</a> to enqueue immediately, or open the workflow and use <strong>Run workflow</strong> (enter the SHA above).</p>';
+      }
+      $("cidash-run-body").innerHTML = h;
+      Array.prototype.forEach.call(document.querySelectorAll('.cidash-plat'), function(b){ b.addEventListener('change', render); });
+    }
+    window.cidashRunCopy = function(){
+      var pre = $("cidash-run-cmd"); if(!pre || !navigator.clipboard) return;
+      navigator.clipboard.writeText(pre.textContent);
+    };
+    window.cidashRunClose = function(){ var m=$("cidash-run-modal"); if(m){ m.style.display='none'; document.body.style.overflow=''; } };
+    function openRun(c, sha, parent, short){
+      if(!RT[c]) return;
+      state = {cap:c, sha:sha||'', parent:parent||'', short:short||''};
+      $("cidash-run-title").textContent = "Run " + RT[c].label;
+      render();
+      $("cidash-run-modal").style.display='block';
+      document.body.style.overflow='hidden';
+    }
+    document.addEventListener('click', function(e){
+      var a = e.target.closest ? e.target.closest('a.cidash-run') : null;
+      if(!a) return;
+      e.preventDefault();
+      openRun(a.getAttribute('data-cap'), a.getAttribute('data-sha'), a.getAttribute('data-parent'), a.getAttribute('data-short'));
+    });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') cidashRunClose(); });
+  })();
+  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__REPO__', repo).replace('__BRANCH__', 'main')
+
 html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -466,6 +601,7 @@ html = f"""<!DOCTYPE html>
     .run-badge a:hover{{text-decoration:underline}}
     .run-spin{{width:9px;height:9px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;display:inline-block;animation:cidash-spin .7s linear infinite}}
     @keyframes cidash-spin{{to{{transform:rotate(360deg)}}}}
+    {run_dialog_css}
   </style>
 </head>
 <body>
@@ -498,6 +634,7 @@ html = f"""<!DOCTYPE html>
     document.addEventListener('keydown', function (e) {{ if (e.key === 'Escape') lvciClose(); }});
   </script>
   {version_check_script}
+  {run_dialog}
   <h1>CI Dashboard — {repo_name}</h1>
   <div class="sub">Last updated: {now} &nbsp;|&nbsp; {refresh_note}</div>
   <div class="nav">
