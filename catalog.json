@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "1.7.0",
+  "version": "1.7.1",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "1.7.1",
+        "date": "2026-06-15",
+        "title": "Dashboard delivered through the shared action (run buttons reach every repo)",
+        "summary": "The dashboard is now built by the shared composite action at the version a repository has opted into (.github/labview-ci.yml: source.ref), instead of a per-repo vendored copy of the generator. That collapses three drifting copies into one source of truth, so the v1.7.0 empty-cell run buttons — and every future dashboard improvement — reach a repository the moment it opts into this version, with no workflow-file edits. The VI Browser's file tree (files.json) is now part of the shared action too.",
+        "highlights": [
+          "The dashboard build logic moved into the shared dashboard action; the source repo and the thin dashboard caller both run it via the opted-in source.ref, so the run buttons render everywhere instead of only where a vendored generator happened to carry them.",
+          "Ported the VI Browser file tree (vi-snapshots/files.json) into the shared action so the snapshot-independent file hierarchy works for every consumer, not just vendored ones.",
+          "The thin dashboard caller now checks out the tooling at source.ref and runs the local action (./_lvci/actions/dashboard), matching the capability jobs — so 'Update now' moves the dashboard version along with everything else."
+        ]
+      },
       {
         "version": "1.7.0",
         "date": "2026-06-15",
