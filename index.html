@@ -36,11 +36,12 @@
     .run-badge a:hover{text-decoration:underline}
     .run-spin{width:9px;height:9px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;display:inline-block;animation:cidash-spin .7s linear infinite}
     @keyframes cidash-spin{to{transform:rotate(360deg)}}
+    .cidash-run{display:inline-block;color:var(--fg-muted);font-size:.95em;line-height:1;text-decoration:none;opacity:.5;transition:opacity .12s,color .12s}.cidash-run:hover{opacity:1;color:var(--link);text-decoration:none}tr:hover .cidash-run{opacity:.85}
   </style>
 </head>
 <body>
   <div style="position:fixed;top:14px;right:16px;z-index:30;display:flex;align-items:center;gap:8px">
-    <div id="lvci-version" title="Latest LabVIEW CI tooling version" style="position:relative;display:inline-flex;align-items:center;gap:6px;background:rgba(110,118,129,.15);color:var(--fg-muted);border:1px solid rgba(110,118,129,.35);padding:8px 12px;border-radius:6px;font-size:.78em;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;user-select:none"><span>v1.7.0</span><span id="lvci-update-dot" aria-hidden="true"></span></div>
+    <div id="lvci-version" title="Latest LabVIEW CI tooling version" style="position:relative;display:inline-flex;align-items:center;gap:6px;background:rgba(110,118,129,.15);color:var(--fg-muted);border:1px solid rgba(110,118,129,.35);padding:8px 12px;border-radius:6px;font-size:.78em;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;user-select:none"><span>v1.7.1</span><span id="lvci-update-dot" aria-hidden="true"></span></div>
     <button onclick="lvciOpen('configure.html','Configure Workers')" title="Configure the behavior of this repository's automated CI activities" style="background:#1f6feb;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:.82em;font-weight:600;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35)">⚙ Configure Workers</button>
     <button onclick="lvciOpen('integrate.html','Apply to New Repo')" title="Install these CI capabilities into another repository" style="background:#238636;color:#fff;border:0;padding:8px 14px;border-radius:6px;font-size:.82em;font-weight:600;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.35)">➕ Apply to New Repo</button>
   </div>
@@ -67,9 +68,94 @@
     }
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') lvciClose(); });
   </script>
-  <style>#lvci-version.lvci-has-update{cursor:pointer;color:var(--fg);border-color:#d29922;background:rgba(210,153,34,.13)}#lvci-version.lvci-has-update:hover{background:rgba(210,153,34,.22)}#lvci-update-dot{display:none}#lvci-update-dot.on{display:block;position:absolute;top:-5px;right:-5px;width:11px;height:11px;border-radius:50%;background:#d29922;box-shadow:0 0 0 2px var(--bg);animation:lvci-pulse 1.7s ease-out infinite}@keyframes lvci-pulse{0%{box-shadow:0 0 0 2px var(--bg),0 0 0 0 rgba(210,153,34,.5)}70%{box-shadow:0 0 0 2px var(--bg),0 0 0 7px rgba(210,153,34,0)}100%{box-shadow:0 0 0 2px var(--bg),0 0 0 0 rgba(210,153,34,0)}}</style><script>(function(){var C={"version": "1.7.0", "sourceRepo": "elijah286/LabVIEW-CI-with-Containers", "sourceRef": "main", "isSource": true, "repo": "elijah286/LabVIEW-CI-with-Containers"};function cmp(a,b){var p=String(a||"0").split("."),q=String(b||"0").split(".");for(var i=0;i<Math.max(p.length,q.length);i++){var d=(parseInt(p[i],10)||0)-(parseInt(q[i],10)||0);if(d)return d;}return 0;}if(!C.version||C.isSource||!C.sourceRepo)return;var u="https://raw.githubusercontent.com/"+C.sourceRepo+"/"+C.sourceRef+"/.github/labview-ci/catalog.json";fetch(u,{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(cat){if(!cat||!cat.version||cmp(cat.version,C.version)<=0)return;var b=document.getElementById("lvci-version"),d=document.getElementById("lvci-update-dot");if(!b)return;b.classList.add("lvci-has-update");if(d)d.classList.add("on");b.title="Update available: v"+C.version+" \u2192 v"+cat.version+" \u2014 click to see what\u2019s new";b.setAttribute("role","button");b.setAttribute("tabindex","0");var go=function(){lvciOpen("whats-new.html?repo="+encodeURIComponent(C.repo)+"&from="+encodeURIComponent(C.version)+"&src="+encodeURIComponent(C.sourceRepo)+"&ref="+encodeURIComponent(C.sourceRef),"What\u2019s New");};b.addEventListener("click",go);b.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});}).catch(function(){});})();</script>
+  <style>#lvci-version.lvci-clickable{cursor:pointer;color:var(--fg)}#lvci-version.lvci-clickable:hover{background:rgba(110,118,129,.25)}#lvci-version.lvci-has-update{cursor:pointer;color:var(--fg);border-color:#d29922;background:rgba(210,153,34,.13)}#lvci-version.lvci-has-update:hover{background:rgba(210,153,34,.22)}#lvci-update-dot{display:none}#lvci-update-dot.on{display:block;position:absolute;top:-5px;right:-5px;width:11px;height:11px;border-radius:50%;background:#d29922;box-shadow:0 0 0 2px var(--bg);animation:lvci-pulse 1.7s ease-out infinite}@keyframes lvci-pulse{0%{box-shadow:0 0 0 2px var(--bg),0 0 0 0 rgba(210,153,34,.5)}70%{box-shadow:0 0 0 2px var(--bg),0 0 0 7px rgba(210,153,34,0)}100%{box-shadow:0 0 0 2px var(--bg),0 0 0 0 rgba(210,153,34,0)}}</style><script>(function(){var C={"version": "1.7.1", "sourceRepo": "elijah286/LabVIEW-CI-with-Containers", "sourceRef": "main", "isSource": true, "repo": "elijah286/LabVIEW-CI-with-Containers"};function cmp(a,b){var p=String(a||"0").split("."),q=String(b||"0").split(".");for(var i=0;i<Math.max(p.length,q.length);i++){var d=(parseInt(p[i],10)||0)-(parseInt(q[i],10)||0);if(d)return d;}return 0;}if(!C.version)return;var b=document.getElementById("lvci-version");if(!b)return;var src=C.sourceRepo||C.repo;var go=function(){lvciOpen("whats-new.html?repo="+encodeURIComponent(C.repo)+"&from="+encodeURIComponent(C.version)+"&src="+encodeURIComponent(src)+"&ref="+encodeURIComponent(C.sourceRef),"What\u2019s New");};b.classList.add("lvci-clickable");b.setAttribute("role","button");b.setAttribute("tabindex","0");b.title="LabVIEW CI v"+C.version+" \u2014 click for release notes";b.addEventListener("click",go);b.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});if(C.isSource||!C.sourceRepo)return;var u="https://raw.githubusercontent.com/"+C.sourceRepo+"/"+C.sourceRef+"/.github/labview-ci/catalog.json";fetch(u,{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(cat){if(!cat||!cat.version||cmp(cat.version,C.version)<=0)return;var d=document.getElementById("lvci-update-dot");b.classList.remove("lvci-clickable");b.classList.add("lvci-has-update");if(d)d.classList.add("on");b.title="Update available: v"+C.version+" \u2192 v"+cat.version+" \u2014 click to see what\u2019s new";}).catch(function(){});})();</script>
+
+  <div id="cidash-run-modal" onclick="if(event.target===this)cidashRunClose()" style="display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55)">
+    <div role="dialog" aria-modal="true" aria-labelledby="cidash-run-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <strong id="cidash-run-title" style="font-size:.95em">Run</strong>
+        <button onclick="cidashRunClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
+      </div>
+      <div id="cidash-run-body" style="padding:16px"></div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var RT = {"masscompile": {"label": "Mass Compile", "platforms": {"windows": {"wf": "masscompile-windows-container.yml", "inputs": {"commit_sha": "{sha}"}}, "linux": {"wf": "masscompile-linux-container.yml", "inputs": {"commit_sha": "{sha}"}}}}, "vi-analyzer": {"label": "VI Analyzer", "platforms": {"windows": {"wf": "run-vi-analyzer-windows-container.yml", "inputs": {"commit_sha": "{sha}"}}, "linux": {"wf": "run-vi-analyzer-linux-container.yml", "inputs": {"commit_sha": "{sha}"}}}}, "vidiff": {"label": "VIDiff", "platforms": {"windows": {"wf": "vidiff-windows-container.yml", "inputs": {"head_sha": "{sha}", "base_sha": "{parent}"}}, "linux": {"wf": "vidiff-linux-container.yml", "inputs": {"head_sha": "{sha}", "base_sha": "{parent}"}}}}, "snapshots": {"label": "VI Snapshots", "platforms": {"all": {"wf": "vi-snapshots.yml", "inputs": {"mode": "head"}}}}};
+    var REPO = "elijah286/LabVIEW-CI-with-Containers";
+    var BRANCH = "main";
+    var state = {cap:null, sha:'', parent:'', short:''};
+    function $(id){ return document.getElementById(id); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function fill(t){ return String(t).replace(/\{sha\}/g, state.sha).replace(/\{parent\}/g, state.parent||''); }
+    function ghCmd(wf, inputs){
+      var s = "gh workflow run " + wf + " --ref " + BRANCH;
+      Object.keys(inputs).forEach(function(k){ s += " -f " + k + "=" + fill(inputs[k]); });
+      return s;
+    }
+    function actionsUrl(wf){ return "https://github.com/" + REPO + "/actions/workflows/" + wf; }
+    function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+    function selectedPlats(def){
+      var keys = Object.keys(def.platforms);
+      if (keys.length === 1) return keys;
+      var boxes = keys.map(function(k){ return $("cidash-plat-"+k); });
+      if (boxes.every(function(b){ return !b; })) return keys.slice();
+      return keys.filter(function(k){ var b = $("cidash-plat-"+k); return b && b.checked; });
+    }
+    function render(){
+      var def = RT[state.cap]; if(!def) return;
+      var keys = Object.keys(def.platforms);
+      var multi = keys.length > 1;
+      var sel = selectedPlats(def);
+      var cmds = sel.map(function(k){ return ghCmd(def.platforms[k].wf, def.platforms[k].inputs); });
+      var h = '';
+      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em">Enqueue the <strong>'+esc(def.label)+'</strong> run for commit <code style="font-family:monospace">'+esc(state.short)+'</code>. Uses your own GitHub auth &mdash; no tokens in the browser.</p>';
+      if (multi){
+        h += '<div style="display:flex;gap:18px;margin:0 0 14px;font-size:.9em">';
+        keys.forEach(function(k){
+          h += '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="cidash-plat" id="cidash-plat-'+k+'" '+(sel.indexOf(k)>=0?'checked':'')+' style="accent-color:var(--link)">'+esc(cap(k))+'</label>';
+        });
+        h += '</div>';
+      }
+      if (!cmds.length){
+        h += '<p style="color:#bb8009;font-size:.85em;margin:0">Select at least one platform.</p>';
+      } else {
+        h += '<div style="position:relative;margin:0 0 12px"><pre id="cidash-run-cmd" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8em;white-space:pre-wrap;word-break:break-word">'+esc(cmds.join("\n"))+'</pre>';
+        h += '<button onclick="cidashRunCopy()" style="position:absolute;top:8px;right:8px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 10px;font-size:.74em;cursor:pointer">Copy</button></div>';
+        h += '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.85em">';
+        sel.forEach(function(k){
+          h += '<a href="'+actionsUrl(def.platforms[k].wf)+'" target="_blank" rel="noopener" style="color:var(--link)">Open '+esc(multi?cap(k):def.label)+' workflow &#8599;</a>';
+        });
+        h += '</div>';
+        h += '<p style="color:var(--fg-muted);font-size:.78em;margin:14px 0 0">Run the command with the <a href="https://cli.github.com/" target="_blank" rel="noopener" style="color:var(--link)">GitHub CLI</a> to enqueue immediately, or open the workflow and use <strong>Run workflow</strong> (enter the SHA above).</p>';
+      }
+      $("cidash-run-body").innerHTML = h;
+      Array.prototype.forEach.call(document.querySelectorAll('.cidash-plat'), function(b){ b.addEventListener('change', render); });
+    }
+    window.cidashRunCopy = function(){
+      var pre = $("cidash-run-cmd"); if(!pre || !navigator.clipboard) return;
+      navigator.clipboard.writeText(pre.textContent);
+    };
+    window.cidashRunClose = function(){ var m=$("cidash-run-modal"); if(m){ m.style.display='none'; document.body.style.overflow=''; } };
+    function openRun(c, sha, parent, short){
+      if(!RT[c]) return;
+      state = {cap:c, sha:sha||'', parent:parent||'', short:short||''};
+      $("cidash-run-title").textContent = "Run " + RT[c].label;
+      render();
+      $("cidash-run-modal").style.display='block';
+      document.body.style.overflow='hidden';
+    }
+    document.addEventListener('click', function(e){
+      var a = e.target.closest ? e.target.closest('a.cidash-run') : null;
+      if(!a) return;
+      e.preventDefault();
+      openRun(a.getAttribute('data-cap'), a.getAttribute('data-sha'), a.getAttribute('data-parent'), a.getAttribute('data-short'));
+    });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') cidashRunClose(); });
+  })();
+  </script>
   <h1>CI Dashboard — LabVIEW-CI-with-Containers</h1>
-  <div class="sub">Last updated: 2026-06-16 01:41 UTC &nbsp;|&nbsp; Auto-refreshes every 15 min</div>
+  <div class="sub">Last updated: 2026-06-16 02:11 UTC &nbsp;|&nbsp; Auto-refreshes every 15 min</div>
   <div class="nav">
     <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/">VI Browser</a>
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers">GitHub</a>
@@ -92,6 +178,21 @@
       </tr>
     </thead>
     <tbody>
+    <tr data-project="false">
+      <td style="padding:8px;font-family:monospace;font-size:.85em">
+        <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers/commit/c44cd11dc6beeeeb6bcbf63a1a576de43c9609e0" style="color:var(--link)">c44cd11</a>
+      </td>
+      <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="feat(dashboard): deliver dashboard via the shared action (1.7.1)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=c44cd11dc6beeeeb6bcbf63a1a576de43c9609e0" style="color:var(--fg)">feat(dashboard): deliver dashboard via the shared action (1.7.1)</a></td>
+      <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">elijah286</td>
+      <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-06-16</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+    </tr>
+
     <tr data-project="false">
       <td style="padding:8px;font-family:monospace;font-size:.85em">
         <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers/commit/b746a8cc34e393dbaac978d63314908acaade073" style="color:var(--link)">b746a8c</a>
@@ -159,10 +260,10 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="feat: masscompile parity + vidiff + snapshots as shared reusable capabilities [r"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=e983941640fcc7a5e271b518f4d031e6bec1485b" style="color:var(--fg)">feat: masscompile parity + vidiff + snapshots as shared reusable capabilities [r</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">elijah286</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-06-15</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="e983941640fcc7a5e271b518f4d031e6bec1485b" data-parent="97180b1e170321aecea5e2e9664636ae3bceab45" data-short="e983941" title="Run Mass Compile for commit e983941">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/e983941640fcc7a5e271b518f4d031e6bec1485b/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="e983941640fcc7a5e271b518f4d031e6bec1485b" data-parent="97180b1e170321aecea5e2e9664636ae3bceab45" data-short="e983941" title="Run VIDiff for commit e983941">&#9655;</a></td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="snapshots" data-sha="e983941640fcc7a5e271b518f4d031e6bec1485b" data-parent="97180b1e170321aecea5e2e9664636ae3bceab45" data-short="e983941" title="Run VI Snapshots for commit e983941">&#9655;</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/linux/linux-c6484cf4d66a/manifest.html" style="color:inherit">linux-c6484cf4d66a</a></span></td>
     </tr>
@@ -536,7 +637,7 @@
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-05-29</td>
       <td style="text-align:center"><span title="40/41 project VIs compiled" style="background:#bb8009;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/masscompile/c433e9e5e28492955ffa4d83f0434159b64d3fb7/index.html" style="color:inherit">⚠️ 98%</a></span></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/c433e9e5e28492955ffa4d83f0434159b64d3fb7/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="c433e9e5e28492955ffa4d83f0434159b64d3fb7" data-parent="d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1" data-short="c433e9e" title="Run VIDiff for commit c433e9e">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=c433e9e5e28492955ffa4d83f0434159b64d3fb7&plat=windows&changed=1" style="color:var(--link)">Win(1)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=c433e9e5e28492955ffa4d83f0434159b64d3fb7&plat=linux&changed=1" style="color:var(--link)">Linux(1)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/linux/linux-c6484cf4d66a/manifest.html" style="color:inherit">linux-c6484cf4d66a</a></span></td>
@@ -549,9 +650,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="moved the send command button"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1" style="color:var(--fg)">moved the send command button</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-05-29</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1" data-parent="d1a86a8741bec13cfa11446d0e72d12479a209ae" data-short="d1705cb" title="Run Mass Compile for commit d1705cb">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1" data-parent="d1a86a8741bec13cfa11446d0e72d12479a209ae" data-short="d1705cb" title="Run VIDiff for commit d1705cb">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1&plat=windows&changed=1" style="color:var(--link)">Win(1)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=d1705cb4e4bf97878034ace4aa9ddd2d53bf29d1&plat=linux&changed=1" style="color:var(--link)">Linux(1)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -566,7 +667,7 @@
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-21</td>
       <td style="text-align:center"><span title="40/41 project VIs compiled" style="background:#bb8009;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/masscompile/d1a86a8741bec13cfa11446d0e72d12479a209ae/index.html" style="color:inherit">⚠️ 98%</a></span></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/d1a86a8741bec13cfa11446d0e72d12479a209ae/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="d1a86a8741bec13cfa11446d0e72d12479a209ae" data-parent="2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6" data-short="d1a86a8" title="Run VIDiff for commit d1a86a8">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=d1a86a8741bec13cfa11446d0e72d12479a209ae&plat=windows&changed=1" style="color:var(--link)">Win(5)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=d1a86a8741bec13cfa11446d0e72d12479a209ae&plat=linux&changed=1" style="color:var(--link)">Linux(5)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -579,9 +680,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Minor refinements"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6" style="color:var(--fg)">Minor refinements</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-21</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6" data-parent="3d513473c8dce75e22b08294b87de2fb37fd9798" data-short="2b5f1aa" title="Run Mass Compile for commit 2b5f1aa">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6" data-parent="3d513473c8dce75e22b08294b87de2fb37fd9798" data-short="2b5f1aa" title="Run VIDiff for commit 2b5f1aa">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6&plat=windows&changed=1" style="color:var(--link)">Win(5)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2b5f1aa1c18f9777042c0f63fa7174d9c2e0d5b6&plat=linux&changed=1" style="color:var(--link)">Linux(5)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -594,9 +695,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Excercise manual correction"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=3d513473c8dce75e22b08294b87de2fb37fd9798" style="color:var(--fg)">Excercise manual correction</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-21</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="3d513473c8dce75e22b08294b87de2fb37fd9798" data-parent="1b00b2d59dd388f8fb93de6661d429025e320a6b" data-short="3d51347" title="Run Mass Compile for commit 3d51347">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/3d513473c8dce75e22b08294b87de2fb37fd9798/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="3d513473c8dce75e22b08294b87de2fb37fd9798" data-parent="1b00b2d59dd388f8fb93de6661d429025e320a6b" data-short="3d51347" title="Run VIDiff for commit 3d51347">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=3d513473c8dce75e22b08294b87de2fb37fd9798&plat=windows&changed=1" style="color:var(--link)">Win(2)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=3d513473c8dce75e22b08294b87de2fb37fd9798&plat=linux&changed=1" style="color:var(--link)">Linux(2)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -609,9 +710,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Copy of excercise generated"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=1b00b2d59dd388f8fb93de6661d429025e320a6b" style="color:var(--fg)">Copy of excercise generated</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-21</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="1b00b2d59dd388f8fb93de6661d429025e320a6b" data-parent="f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5" data-short="1b00b2d" title="Run Mass Compile for commit 1b00b2d">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/1b00b2d59dd388f8fb93de6661d429025e320a6b/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="1b00b2d59dd388f8fb93de6661d429025e320a6b" data-parent="f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5" data-short="1b00b2d" title="Run VIDiff for commit 1b00b2d">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=1b00b2d59dd388f8fb93de6661d429025e320a6b&plat=windows&changed=1" style="color:var(--link)">Win(6)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=1b00b2d59dd388f8fb93de6661d429025e320a6b&plat=linux&changed=1" style="color:var(--link)">Linux(6)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -624,9 +725,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Added new excercises"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5" style="color:var(--fg)">Added new excercises</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-21</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5" data-parent="f96842dc7fd776c01e186bb089eb7079444390f1" data-short="f4640da" title="Run Mass Compile for commit f4640da">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5" data-parent="f96842dc7fd776c01e186bb089eb7079444390f1" data-short="f4640da" title="Run VIDiff for commit f4640da">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5&plat=windows&changed=1" style="color:var(--link)">Win(24)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=f4640dad9ee5e8dcc8cdc87917e97a08f0233ba5&plat=linux&changed=1" style="color:var(--link)">Linux(24)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -639,9 +740,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="improved resize appearance"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=f96842dc7fd776c01e186bb089eb7079444390f1" style="color:var(--fg)">improved resize appearance</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-04</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="f96842dc7fd776c01e186bb089eb7079444390f1" data-parent="e2ee064d41e45456d7d51afd63c3fce28713fc94" data-short="f96842d" title="Run Mass Compile for commit f96842d">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/f96842dc7fd776c01e186bb089eb7079444390f1/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="f96842dc7fd776c01e186bb089eb7079444390f1" data-parent="e2ee064d41e45456d7d51afd63c3fce28713fc94" data-short="f96842d" title="Run VIDiff for commit f96842d">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=f96842dc7fd776c01e186bb089eb7079444390f1&plat=windows&changed=1" style="color:var(--link)">Win(1)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=f96842dc7fd776c01e186bb089eb7079444390f1&plat=linux&changed=1" style="color:var(--link)">Linux(1)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -654,9 +755,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="mass compiled on windows"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=e2ee064d41e45456d7d51afd63c3fce28713fc94" style="color:var(--fg)">mass compiled on windows</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-04</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="e2ee064d41e45456d7d51afd63c3fce28713fc94" data-parent="abb3a165d423dff26829fa296e1039bbc3903ece" data-short="e2ee064" title="Run Mass Compile for commit e2ee064">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/e2ee064d41e45456d7d51afd63c3fce28713fc94/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="e2ee064d41e45456d7d51afd63c3fce28713fc94" data-parent="abb3a165d423dff26829fa296e1039bbc3903ece" data-short="e2ee064" title="Run VIDiff for commit e2ee064">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=e2ee064d41e45456d7d51afd63c3fce28713fc94&plat=windows&changed=1" style="color:var(--link)">Win(6)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=e2ee064d41e45456d7d51afd63c3fce28713fc94&plat=linux&changed=1" style="color:var(--link)">Linux(6)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -669,9 +770,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Windows bug"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=abb3a165d423dff26829fa296e1039bbc3903ece" style="color:var(--fg)">Windows bug</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-04</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="abb3a165d423dff26829fa296e1039bbc3903ece" data-parent="7599b047409f6801f226b06159da3036986c5bb8" data-short="abb3a16" title="Run Mass Compile for commit abb3a16">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/abb3a165d423dff26829fa296e1039bbc3903ece/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="abb3a165d423dff26829fa296e1039bbc3903ece" data-parent="7599b047409f6801f226b06159da3036986c5bb8" data-short="abb3a16" title="Run VIDiff for commit abb3a16">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=abb3a165d423dff26829fa296e1039bbc3903ece&plat=windows&changed=1" style="color:var(--link)">Win(1)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=abb3a165d423dff26829fa296e1039bbc3903ece&plat=linux&changed=1" style="color:var(--link)">Linux(1)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
@@ -684,9 +785,9 @@
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="debugging the assignment of visa resources to curriculum code"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=7599b047409f6801f226b06159da3036986c5bb8" style="color:var(--fg)">debugging the assignment of visa resources to curriculum code</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2024-11-04</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="7599b047409f6801f226b06159da3036986c5bb8" data-parent="3db5c70be32bc7eb8ece0ad96fea46f1ea849d7e" data-short="7599b04" title="Run Mass Compile for commit 7599b04">&#9655;</a></td>
       <td style="text-align:center"><span style="background:#2ea043;color:#fff;padding:2px 7px;border-radius:4px;font-size:.75em"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-analyzer/7599b047409f6801f226b06159da3036986c5bb8/index.html" style="color:inherit">✅ analyze</a></span></td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center"><a href="#" class="cidash-run" data-cap="vidiff" data-sha="7599b047409f6801f226b06159da3036986c5bb8" data-parent="3db5c70be32bc7eb8ece0ad96fea46f1ea849d7e" data-short="7599b04" title="Run VIDiff for commit 7599b04">&#9655;</a></td>
       <td style="text-align:center;font-size:.78em;white-space:nowrap"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=7599b047409f6801f226b06159da3036986c5bb8&plat=windows&changed=1" style="color:var(--link)">Win(22)</a> / <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=7599b047409f6801f226b06159da3036986c5bb8&plat=linux&changed=1" style="color:var(--link)">Linux(22)</a></td>
       <td style="text-align:center"><span style="font-family:monospace;font-size:.72em;color:var(--fg-muted)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-744dfc9a7774/manifest.html" style="color:inherit">win-744dfc9a7774</a></span></td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
