@@ -520,11 +520,21 @@ run_dialog_css = (
     'line-height:1;text-decoration:none;opacity:.5;transition:opacity .12s,color .12s}'
     '.cidash-run:hover{opacity:1;color:var(--link);text-decoration:none}'
     'tr:hover .cidash-run{opacity:.85}'
+    '.cidash-btn{border:1px solid var(--border);border-radius:6px;padding:8px 14px;'
+    'font-size:.85em;font-weight:600;cursor:pointer;font-family:inherit}'
+    '.cidash-go{background:#238636;color:#fff;border-color:transparent}'
+    '.cidash-go:hover{background:#2ea043}.cidash-go:disabled{opacity:.6;cursor:default}'
+    '.cidash-ghost{background:var(--bg);color:var(--fg)}'
+    '.cidash-ghost:hover{border-color:var(--link)}'
 )
-# Modal + controller. Clicking a cell's play glyph opens this, lets the user
-# pick platform(s) for multi-platform capabilities, and surfaces a copyable
-# `gh workflow run` command (pre-filled with the commit SHA) plus a link to the
-# workflow's Run page — token-free, using the user's own GitHub auth.
+# Modal + controller. Clicking a cell's play glyph opens this; clicking "Run now"
+# DISPATCHES the workflow(s) straight to GitHub Actions via the REST API
+# (browser -> api.github.com), so the run actually starts — no terminal, no
+# copy-paste. Dispatch needs a credential the browser can send, so the user pastes
+# a fine-grained token ONCE; it lives only in this browser's localStorage and is
+# sent only to api.github.com (never to the repo, the page, or any third party).
+# A "Run on GitHub" link is offered as a no-token fallback, and the equivalent
+# `gh` command is tucked away for CLI users.
 run_dialog = (r"""
   <div id="cidash-run-modal" onclick="if(event.target===this)cidashRunClose()" style="display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55)">
     <div role="dialog" aria-modal="true" aria-labelledby="cidash-run-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
@@ -540,10 +550,14 @@ run_dialog = (r"""
     var RT = __RUN_TARGETS__;
     var REPO = "__REPO__";
     var BRANCH = "__BRANCH__";
+    var TOK_KEY = "lvci_dispatch_token";
     var state = {cap:null, sha:'', parent:'', short:''};
     function $(id){ return document.getElementById(id); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
     function fill(t){ return String(t).replace(/\{sha\}/g, state.sha).replace(/\{parent\}/g, state.parent||''); }
+    function getTok(){ try{ return localStorage.getItem(TOK_KEY)||''; }catch(e){ return ''; } }
+    function setTok(v){ try{ localStorage.setItem(TOK_KEY, v); }catch(e){} }
+    function clearTok(){ try{ localStorage.removeItem(TOK_KEY); }catch(e){} }
     function ghCmd(wf, inputs){
       var s = "gh workflow run " + wf + " --ref " + BRANCH;
       Object.keys(inputs).forEach(function(k){ s += " -f " + k + "=" + fill(inputs[k]); });
@@ -558,14 +572,55 @@ run_dialog = (r"""
       if (boxes.every(function(b){ return !b; })) return keys.slice();
       return keys.filter(function(k){ var b = $("cidash-plat-"+k); return b && b.checked; });
     }
+    function setStatus(html, kind){
+      var s = $("cidash-run-status"); if(!s) return;
+      var col = kind==='ok' ? '#3fb950' : (kind==='err' ? '#f85149' : (kind==='warn' ? '#d29922' : 'var(--fg-muted)'));
+      s.style.color = col; s.innerHTML = html || '';
+    }
+    function filledInputs(p){ var o={}; Object.keys(p.inputs).forEach(function(k){ o[k]=fill(p.inputs[k]); }); return o; }
+    function dispatchOne(wf, inputs){
+      return fetch('https://api.github.com/repos/'+REPO+'/actions/workflows/'+encodeURIComponent(wf)+'/dispatches', {
+        method:'POST',
+        headers:{ 'Authorization':'Bearer '+getTok(), 'Accept':'application/vnd.github+json',
+                  'X-GitHub-Api-Version':'2022-11-28', 'Content-Type':'application/json' },
+        body: JSON.stringify({ ref: BRANCH, inputs: inputs })
+      }).then(function(r){ return { wf:wf, ok:r.status===204, status:r.status }; })
+        .catch(function(e){ return { wf:wf, ok:false, status:0, err:String(e&&e.message||e) }; });
+    }
+    function runNow(){
+      var def = RT[state.cap]; if(!def) return;
+      var sel = selectedPlats(def);
+      if(!sel.length){ setStatus('Select at least one platform.', 'warn'); return; }
+      if(!getTok()){ showTokenPanel(); return; }
+      var go = $("cidash-run-go"); if(go){ go.disabled = true; }
+      setStatus('Queuing\u2026', null);
+      var jobs = sel.map(function(k){ var p=def.platforms[k];
+        return dispatchOne(p.wf, filledInputs(p)).then(function(res){ res.plat=k; return res; }); });
+      Promise.all(jobs).then(function(results){
+        if(go){ go.disabled = false; }
+        if(results.some(function(r){return r.status===401;})){
+          clearTok(); setStatus('That token was rejected (401). Paste a valid one.', 'err'); showTokenPanel(); return;
+        }
+        if(results.every(function(r){return r.ok;})){
+          var n=results.length;
+          setStatus('\u2713 Queued '+n+' run'+(n>1?'s':'')+'. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'ok');
+        } else {
+          var parts = results.map(function(r){ return (RT[state.cap].platforms[r.plat]&&Object.keys(RT[state.cap].platforms).length>1?cap(r.plat)+': ':'') + (r.ok?'queued':('HTTP '+r.status)); });
+          setStatus(parts.join(' \u00b7 ') + ' \u2014 a 403/404 usually means the token lacks <strong>Actions: write</strong> or access to this repo.', 'err');
+        }
+      });
+    }
+    function showTokenPanel(){ var p=$("cidash-tok-panel"); if(p){ p.style.display='block'; var i=$("cidash-tok-input"); if(i) i.focus(); } }
+    function hideTokenPanel(){ var p=$("cidash-tok-panel"); if(p){ p.style.display='none'; } }
+    function saveTokAndRun(){ var i=$("cidash-tok-input"); var v=(i&&i.value||'').trim(); if(!v){ if(i) i.focus(); return; } setTok(v); hideTokenPanel(); runNow(); }
     function render(){
       var def = RT[state.cap]; if(!def) return;
       var keys = Object.keys(def.platforms);
       var multi = keys.length > 1;
       var sel = selectedPlats(def);
-      var cmds = sel.map(function(k){ return ghCmd(def.platforms[k].wf, def.platforms[k].inputs); });
+      var haveTok = !!getTok();
       var h = '';
-      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em">Enqueue the <strong>'+esc(def.label)+'</strong> run for commit <code style="font-family:monospace">'+esc(state.short)+'</code>. Uses your own GitHub auth &mdash; no tokens in the browser.</p>';
+      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em">Run <strong>'+esc(def.label)+'</strong> for commit <code style="font-family:monospace">'+esc(state.short)+'</code>. Click <strong>Run now</strong> and it is queued on GitHub Actions \u2014 no terminal.</p>';
       if (multi){
         h += '<div style="display:flex;gap:18px;margin:0 0 14px;font-size:.9em">';
         keys.forEach(function(k){
@@ -573,20 +628,35 @@ run_dialog = (r"""
         });
         h += '</div>';
       }
-      if (!cmds.length){
-        h += '<p style="color:#bb8009;font-size:.85em;margin:0">Select at least one platform.</p>';
-      } else {
-        h += '<div style="position:relative;margin:0 0 12px"><pre id="cidash-run-cmd" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8em;white-space:pre-wrap;word-break:break-word">'+esc(cmds.join("\n"))+'</pre>';
-        h += '<button onclick="cidashRunCopy()" style="position:absolute;top:8px;right:8px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 10px;font-size:.74em;cursor:pointer">Copy</button></div>';
-        h += '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:.85em">';
-        sel.forEach(function(k){
-          h += '<a href="'+actionsUrl(def.platforms[k].wf)+'" target="_blank" rel="noopener" style="color:var(--link)">Open '+esc(multi?cap(k):def.label)+' workflow &#8599;</a>';
-        });
-        h += '</div>';
-        h += '<p style="color:var(--fg-muted);font-size:.78em;margin:14px 0 0">Run the command with the <a href="https://cli.github.com/" target="_blank" rel="noopener" style="color:var(--link)">GitHub CLI</a> to enqueue immediately, or open the workflow and use <strong>Run workflow</strong> (enter the SHA above).</p>';
-      }
+      // One-time token setup panel (hidden until needed).
+      h += '<div id="cidash-tok-panel" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin:0 0 12px">';
+      h += '<div style="font-size:.8em;color:var(--fg-muted);margin-bottom:8px">One-time setup. Paste a GitHub token with <strong>Actions: Read and write</strong> on <code>'+esc(REPO)+'</code>. It is stored only in this browser and sent only to api.github.com. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--link)">Create a fine-grained token \u2197</a></div>';
+      h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="cidash-tok-input" type="password" autocomplete="off" placeholder="github_pat_\u2026 or ghp_\u2026" style="flex:1 1 240px;min-width:180px;padding:7px 10px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:.8em">';
+      h += '<button class="cidash-btn cidash-go" id="cidash-tok-save">Save &amp; run</button>';
+      h += '<button class="cidash-btn cidash-ghost" id="cidash-tok-cancel">Cancel</button></div></div>';
+      // Status line (dispatch result / hints).
+      h += '<div id="cidash-run-status" style="font-size:.82em;min-height:1.2em;margin:0 0 12px"></div>';
+      // Primary actions.
+      h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
+      h += '<button class="cidash-btn cidash-go" id="cidash-run-go">\u25B6 Run now</button>';
+      sel.forEach(function(k){
+        h += '<a class="cidash-btn cidash-ghost" style="text-decoration:none" href="'+actionsUrl(def.platforms[k].wf)+'" target="_blank" rel="noopener">Run '+esc(multi?cap(k):def.label)+' on GitHub \u2197</a>';
+      });
+      if (haveTok){ h += '<button class="cidash-btn cidash-ghost" id="cidash-tok-forget" title="Remove the token saved in this browser">Forget token</button>'; }
+      h += '</div>';
+      // CLI fallback, collapsed.
+      var cmds = sel.map(function(k){ return ghCmd(def.platforms[k].wf, def.platforms[k].inputs); });
+      h += '<details style="margin-top:14px"><summary style="cursor:pointer;color:var(--link);font-size:.82em">Prefer the command line?</summary>';
+      h += '<div style="position:relative;margin:10px 0 0"><pre id="cidash-run-cmd" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78em;white-space:pre-wrap;word-break:break-word">'+esc(cmds.join("\n"))+'</pre>';
+      h += '<button onclick="cidashRunCopy()" style="position:absolute;top:8px;right:8px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 10px;font-size:.74em;cursor:pointer">Copy</button></div>';
+      h += '<p style="color:var(--fg-muted);font-size:.76em;margin:8px 0 0">Run with the <a href="https://cli.github.com/" target="_blank" rel="noopener" style="color:var(--link)">GitHub CLI</a>, or use <strong>Run on GitHub</strong> above and paste the SHA into the form.</p></details>';
       $("cidash-run-body").innerHTML = h;
       Array.prototype.forEach.call(document.querySelectorAll('.cidash-plat'), function(b){ b.addEventListener('change', render); });
+      var go=$("cidash-run-go"); if(go) go.addEventListener('click', runNow);
+      var sv=$("cidash-tok-save"); if(sv) sv.addEventListener('click', saveTokAndRun);
+      var cn=$("cidash-tok-cancel"); if(cn) cn.addEventListener('click', hideTokenPanel);
+      var fg=$("cidash-tok-forget"); if(fg) fg.addEventListener('click', function(){ clearTok(); render(); setStatus('Token removed from this browser.', null); });
+      var ti=$("cidash-tok-input"); if(ti) ti.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); saveTokAndRun(); } });
     }
     window.cidashRunCopy = function(){
       var pre = $("cidash-run-cmd"); if(!pre || !navigator.clipboard) return;
