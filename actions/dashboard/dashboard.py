@@ -692,6 +692,18 @@ run_dialog = (r"""
       return s;
     }
     function actionsUrl(wf){ return "https://github.com/" + REPO + "/actions/workflows/" + wf; }
+    // Pre-fill the fine-grained token form: name, resource owner, and the one
+    // permission a workflow_dispatch needs (Actions: write). GitHub provides no
+    // URL param to pre-select the specific repo, so "Repository access" stays a
+    // manual step. Same token (lvci_dispatch_token) the report header + What's New use.
+    function tokenSetupUrl(){
+      var owner = (REPO.split("/")[0]) || "";
+      var qp = "name=" + encodeURIComponent("LabVIEW CI dispatch")
+        + "&description=" + encodeURIComponent("Queue LabVIEW CI runs for " + REPO + " (Run now / Re-run / Update).")
+        + (owner ? "&target_name=" + encodeURIComponent(owner) : "")
+        + "&actions=write";
+      return "https://github.com/settings/personal-access-tokens/new?" + qp;
+    }
     function cap(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
     function selectedPlats(def){
       var keys = Object.keys(def.platforms);
@@ -961,8 +973,8 @@ run_dialog = (r"""
       h += '<div id="cidash-tok-panel" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin:0 0 12px">';
       h += '<div style="font-size:.82em;color:var(--fg);font-weight:600;margin-bottom:6px">One-time setup \u2014 a token to queue runs</div>';
       h += '<ol style="font-size:.8em;color:var(--fg-muted);margin:0 0 8px;padding-left:18px;line-height:1.6">';
-      h += '<li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--link)">Create a fine-grained token \u2197</a></li>';
-      h += '<li><strong>Repository access</strong> \u2192 Only select repositories \u2192 add <code>'+esc(REPO)+'</code>.</li>';
+      h += '<li><a href="'+tokenSetupUrl()+'" target="_blank" rel="noopener" style="color:var(--link)">Create a fine-grained token \u2197</a> \u2014 opens with the name, owner, and <strong>Actions: Read and write</strong> already set.</li>';
+      h += '<li><strong>Repository access</strong> \u2192 Only select repositories \u2192 add <code>'+esc(REPO)+'</code>. <span style="opacity:.8">(the one step a link can\u2019t pre-fill)</span></li>';
       h += '<li><strong>Permissions \u2192 Repository permissions \u2192 Actions \u2192 Read and write</strong>. Required \u2014 selecting the repo alone gives a 403.</li>';
       h += '<li>Generate, then paste it below.</li>';
       h += '</ol>';
