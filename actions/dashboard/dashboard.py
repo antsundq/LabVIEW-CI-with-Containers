@@ -72,6 +72,40 @@ LV_SOURCE_EXTS = (
     '.lvproj', '.xctl', '.xnode', '.vipc', '.vip', '.llb', '.mnu', '.lvtest',
 )
 
+# ── List the VI files present at a revision ─────────────────
+# Powers the VI Browser's file tree INDEPENDENTLY of whether snapshots have
+# been rendered: the browser builds its sidebar from this list, so a revision's
+# hierarchy is always visible (a missing snapshot just shows a placeholder + a
+# "Generate snapshots" prompt). The git tree API returns each blob's SHA, which
+# is exactly the content-address the snapshot store keys on
+# (vi-snapshots/by-blob/<ab>/<blob>.html), so the browser can map every VI to
+# its snapshot (or detect its absence) with no extra index. Filter mirrors
+# build-snapshots.ps1 (*.vi/*.ctl, excluding CI/build dirs).
+_tree_cache = {}
+def vi_tree(sha):
+    if sha in _tree_cache:
+        return _tree_cache[sha]
+    data = gh_get(f'git/trees/{sha}?recursive=1')
+    vis = []
+    if data and isinstance(data.get('tree'), list):
+        for t in data['tree']:
+            if t.get('type') != 'blob':
+                continue
+            p = t.get('path', '')
+            pl = p.lower()
+            if not (pl.endswith('.vi') or pl.endswith('.ctl')):
+                continue
+            if p.startswith(('.github/', 'ci-out/', 'build/')):
+                continue
+            vis.append({'vi_rel': p, 'blob': t.get('sha', '')})
+        vis.sort(key=lambda e: e['vi_rel'].lower())
+    _tree_cache[sha] = vis
+    return vis
+
+# Accumulates one entry per project revision for vi-snapshots/files.json, the
+# VI Browser's snapshot-independent source of commits + file trees.
+file_commits = []
+
 # ── "Run" targets for empty cells ───────────────────────────────
 # Each capability column maps to the consumer-repo workflow(s) that re-run it
 # for one commit, so an empty cell can offer a one-click "run". Entries with
@@ -161,6 +195,20 @@ for c in commits_data:
         for f in files
     )
     proj_flag = 'true' if is_project else 'false'
+
+    # Record this revision's VI file tree for the VI Browser (project revisions
+    # only — CI/tooling commits don't change the VI set, so they would just
+    # duplicate a neighbour's tree). Done here so the browser can render the
+    # hierarchy before — or without — any snapshots existing.
+    if is_project:
+        file_commits.append({
+            'sha': sha,
+            'short': short,
+            'message': msg,
+            'author': author,
+            'date': date,
+            'vis': vi_tree(sha),
+        })
 
     # Fetch commit statuses
     statuses_data = gh_get(f'commits/{sha}/statuses') or []
@@ -728,4 +776,18 @@ elif lvci_version:
     with open('ci-out/dashboard/catalog.json', 'w', encoding='utf-8') as f:
         json.dump({'version': lvci_version,
                    'source': {'repo': lvci_src_repo, 'ref': lvci_src_ref}}, f, indent=2)
-print(f"Dashboard built with {len(commits_data)} commits.")
+
+# The VI Browser's snapshot-independent index: every project revision plus the
+# VI files present in it. Lets the browser render the file hierarchy and offer a
+# "Generate snapshots" action even when nothing has been rendered yet. Deployed
+# with keep_files:true, alongside (never clobbering) the snapshot workflow's
+# commits.json / <sha>/manifest.json.
+files_payload = {
+    'repo': repo,
+    'generated': __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    'commits': file_commits,
+}
+with open('ci-out/dashboard/vi-snapshots/files.json', 'w', encoding='utf-8') as f:
+    json.dump(files_payload, f, ensure_ascii=False)
+print(f"Dashboard built with {len(commits_data)} commits; "
+      f"files.json has {len(file_commits)} project revision(s).")

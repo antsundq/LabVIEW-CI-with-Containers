@@ -373,12 +373,16 @@ def thin_install(catalog: dict, target_root: Path, owner: str | None, name: str 
         f"      labview-version: \"{labview_version}\"\n"
         "    secrets: inherit\n")
 
-    # 2) The dashboard caller — meta-triggered; delegates to the dashboard action.
+    # 2) The dashboard caller — meta-triggered; delegates to the dashboard action
+    #    at the version this repo opted into (config source.ref), checked out at
+    #    runtime, so the dashboard never changes version automatically.
     if "dashboard" in acts:
         write(".github/workflows/dashboard.yml",
             "# CI Dashboard — thin caller. Rebuilds on every commit status, after the\n"
             "# LabVIEW CI workflow, and hourly. The build logic lives in the shared\n"
-            f"# dashboard action (@{alias}); this file owns the triggers + Pages deploy.\n"
+            "# dashboard action, pulled at the capability version this repo opted into\n"
+            "# (.github/labview-ci.yml: source.ref) — so the dashboard updates only when\n"
+            "# you opt in via \"Update now\", never automatically. Owns the triggers + deploy.\n"
             "name: CI Dashboard\n\n"
             "on:\n"
             "  status:\n"
@@ -400,7 +404,19 @@ def thin_install(catalog: dict, target_root: Path, owner: str | None, name: str 
             "    runs-on: ubuntu-latest\n"
             "    steps:\n"
             "      - uses: actions/checkout@v4\n"
-            f"      - uses: {src_repo}/actions/dashboard@{alias}\n"
+            "      - name: Read opted-in tooling ref from config\n"
+            "        id: cfg\n"
+            "        shell: bash\n"
+            "        run: |\n"
+            "          REF=$(awk '/^[[:space:]]*ref:[[:space:]]/{print $2; exit}' .github/labview-ci.yml 2>/dev/null)\n"
+            "          echo \"ref=${REF:-" + alias + "}\" >> \"$GITHUB_OUTPUT\"\n"
+            "      - name: Check out tooling (opted-in version)\n"
+            "        uses: actions/checkout@v4\n"
+            "        with:\n"
+            f"          repository: {src_repo}\n"
+            "          ref: ${{ steps.cfg.outputs.ref }}\n"
+            "          path: _lvci\n"
+            "      - uses: ./_lvci/actions/dashboard\n"
             "        with:\n"
             "          github-token: ${{ secrets.GITHUB_TOKEN }}\n"
             "      - uses: peaceiris/actions-gh-pages@v4\n"
