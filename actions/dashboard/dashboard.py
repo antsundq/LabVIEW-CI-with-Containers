@@ -519,6 +519,13 @@ if lvci_version:
         '#lvci-version.lvci-has-update{cursor:pointer;color:var(--fg);'
         'border-color:#d29922;background:rgba(210,153,34,.13)}'
         '#lvci-version.lvci-has-update:hover{background:rgba(210,153,34,.22)}'
+        '#lvci-version.lvci-updating{cursor:pointer;color:var(--fg);'
+        'border-color:#1f6feb;background:rgba(31,111,235,.14)}'
+        '#lvci-version.lvci-updating:hover{background:rgba(31,111,235,.24)}'
+        '.lvci-spin{width:10px;height:10px;border:2px solid rgba(88,166,255,.4);'
+        'border-top-color:#58a6ff;border-radius:50%;display:inline-block;'
+        'animation:lvci-spin-kf .7s linear infinite}'
+        '@keyframes lvci-spin-kf{to{transform:rotate(360deg)}}'
         '#lvci-update-dot{display:none}'
         '#lvci-update-dot.on{display:block;position:absolute;top:-5px;right:-5px;'
         'width:11px;height:11px;border-radius:50%;background:#d29922;'
@@ -534,24 +541,56 @@ if lvci_version:
         'if(!C.version)return;'
         'var b=document.getElementById("lvci-version");if(!b)return;'
         # The badge always opens the release-notes / What's New dialog, whether or
-        # not an update exists, so the running version is always explorable.
+        # not an update exists. A single reassignable action ("act") lets the in-flight
+        # branch repoint the click to the running upgrade action without stacking listeners.
         'var src=C.sourceRepo||C.repo;'
         'var go=function(){lvciOpen("whats-new.html?repo="+encodeURIComponent(C.repo)+"&from="+encodeURIComponent(C.version)+"&src="+encodeURIComponent(src)+"&ref="+encodeURIComponent(C.sourceRef),"What\\u2019s New");};'
+        'var act=go;'
         'b.classList.add("lvci-clickable");'
         'b.setAttribute("role","button");b.setAttribute("tabindex","0");'
         'b.title="LabVIEW CI v"+C.version+" \\u2014 click for release notes";'
-        'b.addEventListener("click",go);'
-        'b.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});'
-        # For clients, additionally check the source for a newer release and, if one
-        # exists, flag the badge (amber + pulsing dot) and sharpen the tooltip.
+        'b.addEventListener("click",function(){act();});'
+        'b.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();act();}});'
+        # GitHub API helper. Reuse the Run-now dispatch token if present (higher rate
+        # limit); otherwise unauthenticated, which works for public repos.
+        'function tok(){try{return localStorage.getItem("lvci_dispatch_token")||"";}catch(e){return "";}}'
+        'function api(p){var h={"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"};var t=tok();if(t)h.Authorization="Bearer "+t;'
+        'return fetch("https://api.github.com/repos/"+C.repo+p,{headers:h,cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;});}'
+        'function active(runs){var S=["queued","in_progress","requested","waiting","pending"];'
+        'return (runs||[]).filter(function(r){return S.indexOf(r.status)>=0&&Date.parse(r.created_at)>Date.now()-2*3600*1000;})[0];}'
+        # Replace the version pill with an in-flight "Updating" indicator (spinner +
+        # blue) that opens the running action. Takes priority over the update dot.
+        'function inflight(label,url,tip){b.classList.remove("lvci-clickable","lvci-has-update");b.classList.add("lvci-updating");'
+        'b.textContent="";var sp=document.createElement("span");sp.className="lvci-spin";'
+        'var tx=document.createElement("span");tx.textContent=label;b.appendChild(sp);b.appendChild(tx);'
+        'b.title=tip;act=function(){window.open(url,"_blank","noopener");};}'
+        # 1) Is the update workflow itself running (just clicked Update now / the PR is
+        #    being opened)? -> "Updating..." linking to that run.
+        'api("/actions/workflows/apply-tooling-update.yml/runs?per_page=5").then(function(j){'
+        'var a=active(j&&j.workflow_runs);'
+        'if(a){inflight("Updating\\u2026",a.html_url,"LabVIEW CI update in progress \\u2014 click to view the run");return true;}return false;'
+        '}).then(function(done){if(done)return done;'
+        # 2) Was an update already merged (this repo\u2019s committed catalog version is newer
+        #    than the version THIS page was built at)? Then the dashboard is rebuilding/
+        #    deploying \u2014 the exact window where the badge used to silently lag. Show
+        #    "Updating to vX..." linking to the in-flight (or latest) dashboard build.
+        'return fetch("https://raw.githubusercontent.com/"+C.repo+"/HEAD/.github/labview-ci/catalog.json",{cache:"no-store"})'
+        '.then(function(r){return r.ok?r.json():null;}).then(function(cat){'
+        'if(!cat||!cat.version||cmp(cat.version,C.version)<=0)return false;'
+        'return api("/actions/workflows/dashboard-pages.yml/runs?per_page=3").then(function(j){'
+        'var runs=(j&&j.workflow_runs)||[];var r=active(runs)||runs[0];var url=r?r.html_url:("https://github.com/"+C.repo+"/actions");'
+        'inflight("Updating to v"+cat.version+"\\u2026",url,"Update to v"+cat.version+" is being deployed \\u2014 click to watch the build");return true;});});'
+        '}).then(function(done){if(done)return done;'
+        # 3) Otherwise the normal "update available" check (clients only): flag the
+        #    badge amber + pulsing dot when the source publishes a newer release.
         'if(C.isSource||!C.sourceRepo)return;'
-        'var u="https://raw.githubusercontent.com/"+C.sourceRepo+"/"+C.sourceRef+"/.github/labview-ci/catalog.json";'
-        'fetch(u,{cache:"no-store"}).then(function(r){return r.ok?r.json():null;}).then(function(cat){'
+        'fetch("https://raw.githubusercontent.com/"+C.sourceRepo+"/"+C.sourceRef+"/.github/labview-ci/catalog.json",{cache:"no-store"})'
+        '.then(function(r){return r.ok?r.json():null;}).then(function(cat){'
         'if(!cat||!cat.version||cmp(cat.version,C.version)<=0)return;'
         'var d=document.getElementById("lvci-update-dot");'
         'b.classList.remove("lvci-clickable");b.classList.add("lvci-has-update");if(d)d.classList.add("on");'
         'b.title="Update available: v"+C.version+" \\u2192 v"+cat.version+" \\u2014 click to see what\\u2019s new";'
-        '}).catch(function(){});})();</scr' + 'ipt>'
+        '}).catch(function(){});});})();</scr' + 'ipt>'
     )
 
 # ── "Run this cell" dialog ──────────────────────────────────
