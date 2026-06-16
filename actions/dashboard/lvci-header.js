@@ -125,6 +125,13 @@
     '.lvci-ver .lvci-dot{width:7px;height:7px;border-radius:50%;background:#d29922;box-shadow:0 0 0 0 rgba(210,153,34,.5);animation:lvci-pulse 1.8s infinite;display:none}',
     '.lvci-ver.behind .lvci-dot{display:inline-block}',
     '@keyframes lvci-pulse{0%{box-shadow:0 0 0 0 rgba(210,153,34,.5)}70%{box-shadow:0 0 0 6px rgba(210,153,34,0)}100%{box-shadow:0 0 0 0 rgba(210,153,34,0)}}',
+    // Revision picker (per-revision reports: switch which revision you're viewing)
+    '.lvci-rev{display:inline-flex;align-items:center;gap:7px;flex:0 1 auto;min-width:0}',
+    '.lvci-rev .lvci-revlbl{font-size:11px;font-weight:600;color:#8b949e;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em}',
+    '.lvci-rev select{font:inherit;font-size:12.5px;font-weight:500;max-width:260px;text-overflow:ellipsis;color:#e6edf3;',
+      'background:rgba(177,186,196,.10);border:1px solid #30363d;border-radius:7px;padding:6px 8px;cursor:pointer;color-scheme:dark}',
+    '.lvci-rev select:hover{border-color:#8b949e}',
+    '@media(prefers-color-scheme:light){.lvci-rev .lvci-revlbl{color:#57606a}.lvci-rev select{color:#1f2328;background:#fff;border-color:#d0d7de;color-scheme:light}}',
     // Hamburger (mobile)
     '.lvci-burger{display:none;align-items:center;justify-content:center;width:38px;height:34px;border:1px solid #30363d;border-radius:7px;background:transparent;color:inherit;cursor:pointer;flex:0 0 auto}',
     '@media(prefers-color-scheme:light){.lvci-burger{border-color:#d0d7de}}',
@@ -145,7 +152,7 @@
     // ── Mobile menu ───────────────────────────────────────────────────────
     '.lvci-menu{display:none}',
     '@media(max-width:820px){',
-      '.lvci-nav,.lvci-actions{display:none}',
+      '.lvci-nav,.lvci-actions,.lvci-hdr>.lvci-rev{display:none}',
       '.lvci-burger{display:inline-flex}',
       '.lvci-brand{flex:1 1 auto}',
       '.lvci-menu.open{display:block;position:sticky;top:var(--lvh-h);z-index:199;',
@@ -153,6 +160,8 @@
       '.lvci-menu a,.lvci-menu button.lvci-m{display:flex;width:100%;align-items:center;gap:9px;text-align:left;',
         'color:#e6edf3;background:transparent;border:0;font-size:15px;font-weight:500;padding:11px 12px;border-radius:8px;text-decoration:none;cursor:pointer}',
       '.lvci-menu a:hover,.lvci-menu button.lvci-m:hover{background:rgba(177,186,196,.12)}',
+      '.lvci-menu .lvci-rev{display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:8px 12px 4px}',
+      '.lvci-menu .lvci-rev select{max-width:none;width:100%;font-size:15px;padding:10px}',
       '.lvci-menu .lvci-sep{height:1px;background:#30363d;margin:6px 4px}',
       '@media(prefers-color-scheme:light){.lvci-menu.open{background:#fff;border-bottom-color:#d0d7de}.lvci-menu a,.lvci-menu button.lvci-m{color:#1f2328}.lvci-menu .lvci-sep{background:#d0d7de}}',
     '}',
@@ -196,11 +205,37 @@
     'vi-browser': 'vi-browser',
     'vi-analyzer-report': 'dashboard',
     'masscompile-report': 'dashboard',
+    'worker-manifest': 'dashboard',
     'report-viewer': 'dashboard',
     'configure': 'dashboard',
     'integrate': 'dashboard',
     'whats-new': 'dashboard'
   };
+
+  // ── Per-revision DOCUMENT types ───────────────────────────────────────────
+  // Every report that is produced for a specific commit is described here once.
+  // This drives, for that context: the "Regenerate … for this revision" action
+  // (dispatches `workflow[platform]` with inputs.commit_sha), the revision
+  // <select> in the header (a page lives at `<prefix>/<sha>/index.html`, and a
+  // report is "available" when `<prefix>/<sha>/summary.json` exists), the
+  // dashboard's optimistic queued bridge key (`cap|sha`), and the status text.
+  // Adding a FUTURE document type is a single entry here + emitting the same
+  // window.LVCI config from its generator — no other change to this file.
+  var DOCTYPES = {
+    'vi-analyzer-report': {
+      prefix: 'vi-analyzer', cap: 'vi-analyzer', label: 'VI Analyzer',
+      regenLabel: 'Re-run analysis', rawLabel: 'Native report',
+      workflow: { windows: 'run-vi-analyzer-windows-container.yml',
+                  linux:   'run-vi-analyzer-linux-container.yml' }
+    },
+    'masscompile-report': {
+      prefix: 'masscompile', cap: 'masscompile', label: 'Mass Compile',
+      regenLabel: 'Regenerate report', rawLabel: 'Raw log',
+      workflow: { windows: 'masscompile-windows-container.yml',
+                  linux:   'masscompile-linux-container.yml' }
+    }
+  };
+  var DOC = DOCTYPES[ctx] || null;   // non-null only on a per-revision report
 
   // ── Context actions (surfaced on the right; collapse into the mobile menu).
   //    Each action: {label, kind|href, primary|accent, newTab}. `kind` triggers
@@ -208,19 +243,22 @@
   //    rerun dispatch); `href` is a plain link. ──────────────────────────────
   function buildActions() {
     var commitUrl = (repo && cfg.sha) ? ('https://github.com/' + repo + '/commit/' + cfg.sha) : '';
+    // Per-revision reports (VI Analyzer, Mass Compile, …) share one action set,
+    // driven by the DOCTYPES entry: Regenerate (dispatch this revision's run),
+    // the native artifact (raw report / raw log), and the commit on GitHub.
+    if (DOC) {
+      return [
+        { label: DOC.regenLabel, icon: '\u21bb', kind: 'rerun', accent: true },
+        cfg.rawUrl ? { label: DOC.rawLabel, icon: '\u2197', href: cfg.rawUrl, newTab: true } : null,
+        commitUrl ? { label: 'This commit', icon: '\u2197', href: commitUrl, newTab: true } : null
+      ].filter(Boolean);
+    }
     var A = {
       'dashboard': [
         { label: 'Configure Workers', icon: '\u2699', kind: 'configure', accent: true },
         { label: 'Apply to New Repo', icon: '\u2795', kind: 'integrate', primary: true }
       ],
-      'vi-analyzer-report': [
-        { label: 'Re-run analysis', icon: '\u21bb', kind: 'rerun', accent: true },
-        cfg.rawUrl ? { label: 'Native report', icon: '\u2197', href: cfg.rawUrl, newTab: true } : null,
-        commitUrl ? { label: 'This commit', icon: '\u2197', href: commitUrl, newTab: true } : null
-      ],
-      'masscompile-report': [
-        commitUrl ? { label: 'This commit', icon: '\u2197', href: commitUrl, newTab: true } : null
-      ],
+      'worker-manifest': [],
       'vi-browser': [],
       'report-viewer': [],
       'configure': [],
@@ -242,15 +280,16 @@
     window.location.href = base + '/' + t.src;
   }
 
-  // ── Re-run analysis: dispatch a fresh run for THIS commit, reusing the
-  //    dashboard's token + optimistic queued bridge (so the dashboard cell shows
-  //    a spinner immediately). Owned here so it's one implementation everywhere.
+  // ── Regenerate this revision's report: dispatch a fresh run for THIS commit,
+  //    reusing the dashboard's token + optimistic queued bridge (so the
+  //    dashboard cell shows a spinner immediately). Owned here so it's one
+  //    implementation for every per-revision document type (see DOCTYPES). ────
   var TOK_KEY = 'lvci_dispatch_token';
   var QKEY = 'lvci_queued_runs';
   function tok() { try { return localStorage.getItem(TOK_KEY) || ''; } catch (e) { return ''; } }
   function rerunWorkflow() {
-    return cfg.platform === 'linux' ? 'run-vi-analyzer-linux-container.yml'
-                                    : 'run-vi-analyzer-windows-container.yml';
+    var wf = (DOC && DOC.workflow) || {};
+    return cfg.platform === 'linux' ? (wf.linux || wf.windows) : (wf.windows || wf.linux);
   }
   function setStatus(html, kind) {
     var el = document.getElementById('lvci-status'); if (!el) return;
@@ -259,10 +298,11 @@
     el.style.color = kind === 'ok' ? '#3fb950' : (kind === 'err' ? '#f85149' : '');
   }
   function markQueued() {
+    if (!DOC) return;
     try {
       var o = JSON.parse(localStorage.getItem(QKEY) || '{}') || {};
-      o['vi-analyzer|' + cfg.sha] = { ts: Date.now(), plats: [cfg.platform === 'linux' ? 'linux' : 'windows'],
-                                      parent: '', short: (cfg.sha || '').slice(0, 7), runs: [] };
+      o[DOC.cap + '|' + cfg.sha] = { ts: Date.now(), plats: [cfg.platform === 'linux' ? 'linux' : 'windows'],
+                                     parent: '', short: (cfg.sha || '').slice(0, 7), runs: [] };
       localStorage.setItem(QKEY, JSON.stringify(o));
     } catch (e) {}
   }
@@ -274,11 +314,11 @@
       + '&description=' + encodeURIComponent('Dispatch CI runs for ' + repo)
       + '&target_name=' + encodeURIComponent(owner) + '&actions=write';
     p.innerHTML =
-      '<div>Re-running needs a fine-grained token with <strong>Actions: Read and write</strong> on '
+      '<div>Regenerating needs a fine-grained token with <strong>Actions: Read and write</strong> on '
       + '<code>' + esc(repo) + '</code>. <a href="' + url + '" target="_blank" rel="noopener" style="color:#58a6ff">Create one \u2197</a> '
       + '(stored only in this browser; shared with the dashboard\u2019s Run now).</div>'
       + '<input id="lvci-tok-in" type="password" placeholder="github_pat_\u2026" autocomplete="off" spellcheck="false">'
-      + '<div><button class="lvci-btn primary" id="lvci-tok-save">Save &amp; re-run</button></div>';
+      + '<div><button class="lvci-btn primary" id="lvci-tok-save">Save &amp; regenerate</button></div>';
     p.className = 'lvci-tok show';
     var inp = document.getElementById('lvci-tok-in');
     if (inp) inp.focus();
@@ -294,15 +334,17 @@
   function doDispatch() {
     var btn = document.getElementById('lvci-rerun');
     var wf = rerunWorkflow();
+    var label = (DOC && DOC.regenLabel) || 'Regenerate report';
+    var docLabel = (DOC && DOC.label) || 'report';
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="lvci-spin"></span>Queuing\u2026'; }
-    setStatus('Queuing a fresh VI Analyzer run\u2026', null);
+    setStatus('Queuing a fresh ' + esc(docLabel) + ' run\u2026', null);
     fetch('https://api.github.com/repos/' + repo + '/actions/workflows/' + encodeURIComponent(wf) + '/dispatches', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + tok(), 'Accept': 'application/vnd.github+json',
                  'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref: 'main', inputs: { commit_sha: cfg.sha } })
     }).then(function (r) {
-      if (btn) { btn.disabled = false; btn.innerHTML = '\u21bb Re-run analysis'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = '\u21bb ' + esc(label); }
       if (r.status === 204) {
         markQueued();
         setStatus('\u2713 Queued a fresh run \u2014 the <a href="' + base + '/">dashboard</a> cell shows it working now; this report updates when the run finishes. '
@@ -314,12 +356,12 @@
       if (r.status === 404) { setStatus('<strong>404</strong>: the token cannot see <code>' + esc(repo) + '</code>. Grant it access + Actions: Read and write.', 'err'); showTokenPanel(); return; }
       setStatus('Dispatch failed (HTTP ' + r.status + ').', 'err');
     }).catch(function (e) {
-      if (btn) { btn.disabled = false; btn.innerHTML = '\u21bb Re-run analysis'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = '\u21bb ' + esc(label); }
       setStatus('Network error: ' + esc(String(e && e.message || e)), 'err');
     });
   }
   function rerun() {
-    if (!repo || !cfg.sha) { setStatus('Re-run needs a repository and commit.', 'err'); return; }
+    if (!repo || !cfg.sha) { setStatus('Regenerating needs a repository and commit.', 'err'); return; }
     if (!tok()) { showTokenPanel(); setStatus('Paste a token to dispatch the run.', null); return; }
     doDispatch();
   }
@@ -345,6 +387,79 @@
       });
     }
     return el;
+  }
+
+  // ── Revision picker (per-revision reports only) ───────────────────────────
+  // Reuses the VI Browser's "pick a commit" metaphor: a <select> of revisions
+  // that, when changed, opens the SAME document type for that revision
+  // (`<prefix>/<sha>/index.html`). The revision list comes from the SAME source
+  // the VI Browser uses — vi-snapshots/{files.json,commits.json} — and is
+  // filtered to revisions that actually have a report of this type (probed via
+  // `<prefix>/<sha>/summary.json`), so it never lands on a 404. The revision
+  // being viewed is always present + selected, even while the probe runs.
+  function makeRevPicker() {
+    var wrap = document.createElement('label'); wrap.className = 'lvci-rev';
+    var lbl = document.createElement('span'); lbl.className = 'lvci-revlbl'; lbl.textContent = 'Revision';
+    var sel = document.createElement('select');
+    sel.setAttribute('aria-label', 'View another revision\u2019s ' + (DOC ? DOC.label : '') + ' report');
+    var cur = document.createElement('option');
+    cur.value = cfg.sha || '';
+    cur.textContent = (cfg.short || (cfg.sha || '').slice(0, 7)) || 'this revision';
+    sel.appendChild(cur);
+    sel.value = cfg.sha || '';
+    sel.addEventListener('change', function () {
+      var v = sel.value;
+      if (v && v !== cfg.sha) window.location.href = base + '/' + DOC.prefix + '/' + v + '/index.html';
+    });
+    wrap.appendChild(lbl); wrap.appendChild(sel);
+    return { wrap: wrap, sel: sel };
+  }
+  function optionLabel(c) {
+    var msg = (c.message || '').split('\n')[0];
+    return (c.short || (c.sha || '').slice(0, 7)) + (msg ? (' \u2014 ' + msg.slice(0, 42)) : '')
+         + (c.sha === cfg.sha ? '  \u00b7 current' : '');
+  }
+  function loadRevisions(selects) {
+    if (!DOC || !selects.length) return;
+    var jget = function (u) { return fetch(u, { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); };
+    Promise.all([jget(base + '/vi-snapshots/files.json'), jget(base + '/vi-snapshots/commits.json')]).then(function (res) {
+      var filesDoc = res[0], snap = res[1];
+      var fileCommits = (filesDoc && Array.isArray(filesDoc.commits)) ? filesDoc.commits : [];
+      var fileShas = {}; fileCommits.forEach(function (c) { fileShas[c.sha] = 1; });
+      var order = [], bySha = {};
+      var put = function (c) { if (!c || !c.sha) return; var p = bySha[c.sha] || {}; for (var k in c) if (c[k] != null) p[k] = c[k]; bySha[c.sha] = p; if (order.indexOf(c.sha) < 0) order.push(c.sha); };
+      (Array.isArray(snap) ? snap : []).forEach(function (c) { if (!fileShas[c.sha]) put(c); });
+      fileCommits.forEach(function (c) { put({ sha: c.sha, short: c.short, message: c.message, author: c.author, date: c.date }); });
+      var list = order.map(function (s) { return bySha[s]; });
+      if (cfg.sha && !bySha[cfg.sha]) list.unshift({ sha: cfg.sha, short: cfg.short || cfg.sha.slice(0, 7), message: '' });
+
+      // Probe which revisions actually have a report of THIS type; the current
+      // revision is known-present (it's the page we're on).
+      var toCheck = list.filter(function (c) { return c.sha && c.sha !== cfg.sha; });
+      var avail = {}; if (cfg.sha) avail[cfg.sha] = true;
+      function fill() {
+        var final = list.filter(function (c) { return c.sha === cfg.sha || avail[c.sha]; });
+        if (!final.length) return;
+        selects.forEach(function (sel) {
+          sel.innerHTML = '';
+          final.forEach(function (c) {
+            var o = document.createElement('option'); o.value = c.sha; o.textContent = optionLabel(c);
+            sel.appendChild(o);
+          });
+          sel.value = cfg.sha || final[0].sha;
+        });
+      }
+      if (!toCheck.length) { fill(); return; }
+      var idx = 0, done = 0, total = toCheck.length, CAP = 8;
+      function next() {
+        if (idx >= total) return;
+        var c = toCheck[idx++];
+        fetch(base + '/' + DOC.prefix + '/' + c.sha + '/summary.json', { method: 'HEAD', cache: 'no-cache' })
+          .then(function (r) { avail[c.sha] = r.ok; }).catch(function () { avail[c.sha] = false; })
+          .then(function () { done++; if (done === total) fill(); else next(); });
+      }
+      for (var k = 0; k < Math.min(CAP, total); k++) next();
+    }).catch(function () {});
   }
 
   // ── Build the header DOM ──────────────────────────────────────────────────
@@ -378,6 +493,11 @@
     });
     hdr.appendChild(nav);
 
+    // Revision picker (per-revision report contexts only) — sits just left of
+    // the actions cluster so "which revision" + "Regenerate" read together.
+    var revBar = null, revMenu = null;
+    if (DOC) { revBar = makeRevPicker(); hdr.appendChild(revBar.wrap); }
+
     // Actions
     var actions = document.createElement('div');
     actions.className = 'lvci-actions';
@@ -401,6 +521,7 @@
     // Mobile menu
     var menu = document.createElement('div');
     menu.className = 'lvci-menu';
+    if (DOC) { revMenu = makeRevPicker(); menu.appendChild(revMenu.wrap); var sep0 = document.createElement('div'); sep0.className = 'lvci-sep'; menu.appendChild(sep0); }
     NAV.forEach(function (n) {
       var a = document.createElement('a');
       a.href = n.href;
@@ -416,6 +537,15 @@
     var wn = document.createElement('a'); wn.href = base + '/whats-new.html'; wn.id = 'lvci-ver-m';
     wn.textContent = "What\u2019s new"; menu.appendChild(wn);
     burger.addEventListener('click', function () { menu.classList.toggle('open'); });
+
+    // Populate the revision picker(s) once mounted (async; filters to revisions
+    // that actually have a report of this type).
+    if (DOC) {
+      var sels = [];
+      if (revBar) sels.push(revBar.sel);
+      if (revMenu) sels.push(revMenu.sel);
+      loadRevisions(sels);
+    }
 
     // Status + token panel (used by re-run)
     var status = document.createElement('div'); status.id = 'lvci-status'; status.className = 'lvci-status';
