@@ -567,6 +567,16 @@ run_dialog_css = (
     '.cidash-go:hover{background:#2ea043}.cidash-go:disabled{opacity:.6;cursor:default}'
     '.cidash-ghost{background:var(--bg);color:var(--fg)}'
     '.cidash-ghost:hover{border-color:var(--link)}'
+    # Danger button used to cancel a queued run.
+    '.cidash-danger{background:#da3633;color:#fff;border-color:transparent}'
+    '.cidash-danger:hover{background:#f85149}.cidash-danger:disabled{opacity:.6;cursor:default}'
+    # The Queued badge is now a button that opens the manage dialog (view / cancel).
+    '.cidash-queued{cursor:pointer}'
+    '.cidash-queued:hover{filter:brightness(1.13)}'
+    '.cidash-queued:focus-visible{outline:2px solid var(--link);outline-offset:1px}'
+    # "#N" place-in-queue chip shown inside the Queued badge when several are waiting.
+    '.cidash-qpos{margin-left:5px;font-weight:700;opacity:.92;font-variant-numeric:tabular-nums}'
+    '.cidash-qpos:empty{display:none}'
 )
 # Modal + controller. Clicking a cell's play glyph opens this; clicking "Run now"
 # DISPATCHES the workflow(s) straight to GitHub Actions via the REST API
@@ -584,6 +594,15 @@ run_dialog = (r"""
         <button onclick="cidashRunClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
       </div>
       <div id="cidash-run-body" style="padding:16px"></div>
+    </div>
+  </div>
+  <div id="cidash-q-modal" onclick="if(event.target===this)cidashQClose()" style="display:none;position:fixed;inset:0;z-index:61;background:rgba(0,0,0,.55)">
+    <div role="dialog" aria-modal="true" aria-labelledby="cidash-q-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <strong id="cidash-q-title" style="font-size:.95em">Queued run</strong>
+        <button onclick="cidashQClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
+      </div>
+      <div id="cidash-q-body" style="padding:16px"></div>
     </div>
   </div>
   <script>
@@ -640,16 +659,20 @@ run_dialog = (r"""
     var QTTL = 20*60*1000;   // forget an unconfirmed entry after 20 min
     var QFAST = 60*1000;     // re-check this often while a queued run is unconfirmed
     var qReloadArmed = false;
+    var qCapturing = {};     // key -> [callbacks] while a run-id lookup is in flight
     function qLoad(){ try{ return JSON.parse(localStorage.getItem(QKEY)||"{}")||{}; }catch(e){ return {}; } }
     function qSave(o){ try{ localStorage.setItem(QKEY, JSON.stringify(o)); }catch(e){} }
     function qPaint(td, c, sha){
-      // Overlay a spinning "Queued" badge onto the cell, replacing its run glyph.
+      // Overlay the spinning "Queued" badge onto the cell, replacing its run glyph.
+      // The badge is now a BUTTON (not a link): clicking it opens the manage dialog
+      // where the run can be viewed on GitHub or cancelled. A "#N" chip (filled in
+      // by qRenumber) shows the run's place in the queue when several are waiting.
       if(!td) return;
       td.classList.add('cidash-queued-cell');
       td.setAttribute('data-qcap', c); td.setAttribute('data-qsha', sha);
-      td.innerHTML = '<span class="run-badge cidash-queued" title="Queued from this browser \u2014 the live status appears once the run starts and the dashboard rebuilds">'
-        + '<a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:5px">'
-        + '<span class="run-spin"></span>Queued</a></span>';
+      td.innerHTML = '<span class="run-badge cidash-queued" role="button" tabindex="0" '
+        + 'title="Queued from this browser \u2014 click to view it on GitHub or cancel it">'
+        + '<span class="run-spin"></span>Queued<span class="cidash-qpos"></span></span>';
     }
     function qArmReload(){
       // While a queued run is still unconfirmed, reload sooner than the lazy
@@ -658,13 +681,123 @@ run_dialog = (r"""
       if(qReloadArmed) return; qReloadArmed = true;
       setTimeout(function(){ location.reload(); }, QFAST);
     }
-    function markQueued(c, sha, plats){
-      var o = qLoad(); o[c+'|'+sha] = { ts: Date.now(), plats: plats||[] }; qSave(o);
+    function qLiveEntries(o){
+      // The non-expired queued entries, oldest first — this IS the queue order.
+      var now = Date.now();
+      return Object.keys(o)
+        .filter(function(k){ var e=o[k]; return e && (now-(e.ts||0))<=QTTL; })
+        .map(function(k){ return { key:k, ts:o[k].ts||0 }; })
+        .sort(function(a,b){ return a.ts - b.ts; });
+    }
+    function qRenumber(){
+      // Number the optimistic queued cells by the order they were queued (oldest
+      // = #1) so the user can see each run's place in the line. The chip is hidden
+      // when only one run is queued (a position is only meaningful among several).
+      var o = qLoad(); var live = qLiveEntries(o); var show = live.length > 1;
+      live.forEach(function(en, idx){
+        var i = en.key.indexOf('|'); var c = en.key.slice(0,i); var sha = en.key.slice(i+1);
+        var td = document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
+        if(!td) return;
+        var pos = td.querySelector('.cidash-qpos');
+        if(pos) pos.textContent = show ? ('#'+(idx+1)) : '';
+      });
+    }
+    function markQueued(c, sha, plats, parent, ts){
+      var o = qLoad();
+      o[c+'|'+sha] = { ts: ts || Date.now(), plats: plats||[], parent: parent||'', short: (sha||'').slice(0,7), runs: [] };
+      qSave(o);
       var a = document.querySelector('a.cidash-run[data-cap="'+c+'"][data-sha="'+sha+'"]');
       var td = a ? (a.closest ? a.closest('td') : null)
                  : document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
       qPaint(td, c, sha);
       qArmReload();
+      qRenumber();
+    }
+    function qForget(c, sha){
+      // Drop the optimistic entry and restore the cell's run glyph so the cell is
+      // immediately actionable again (re-run) without waiting for a reload.
+      var o = qLoad(); var entry = o[c+'|'+sha];
+      delete o[c+'|'+sha]; qSave(o);
+      var td = document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
+      if(td){
+        var parent = (entry && entry.parent) || '';
+        var short = (entry && entry.short) || sha.slice(0,7);
+        var label = (RT[c] && RT[c].label) || c;
+        td.classList.remove('cidash-queued-cell');
+        td.removeAttribute('data-qcap'); td.removeAttribute('data-qsha');
+        td.innerHTML = '<a href="#" class="cidash-run" data-cap="'+esc(c)+'" data-sha="'+esc(sha)+'" '
+          + 'data-parent="'+esc(parent)+'" data-short="'+esc(short)+'" '
+          + 'title="Run '+esc(label)+' for commit '+esc(short)+'">\u25B7</a>';
+      }
+      qRenumber();
+    }
+    function entryItems(c, entry){
+      // The (workflow, platform) pairs this queued entry dispatched.
+      var def = RT[c]; if(!def || !entry) return [];
+      return (entry.plats||[]).map(function(plat){
+        var p = def.platforms[plat]; return p ? { wf: p.wf, plat: plat } : null;
+      }).filter(function(x){ return x; });
+    }
+    function claimedRunIds(){
+      // Run ids already attributed to some queued cell, so a lookup never grabs a
+      // run that belongs to a different cell.
+      var o = qLoad(); var s = {};
+      Object.keys(o).forEach(function(k){ ((o[k]||{}).runs||[]).forEach(function(r){ if(r && r.id) s[r.id]=1; }); });
+      return s;
+    }
+    function captureRuns(c, sha, attempt, cb){
+      // A workflow_dispatch returns 204 with no run id, so to later CANCEL the run
+      // (and link straight to it) we look it up: poll the workflow's recent
+      // dispatch runs and claim the freshest active one we have not already
+      // attributed to another cell. Best-effort, non-blocking, and self-limiting.
+      // Concurrent lookups for the SAME cell (e.g. the manage dialog opening AND a
+      // Cancel click) are coalesced so they share one network pass and both get
+      // their callback when it resolves — no duplicate claims, no stalled retries.
+      var key = c+'|'+sha;
+      attempt = attempt || 1;
+      if(attempt === 1){
+        if(qCapturing[key]){ if(cb) qCapturing[key].push(cb); return; }
+        qCapturing[key] = cb ? [cb] : [];
+      }
+      function done(){ var cbs = qCapturing[key] || []; delete qCapturing[key]; cbs.forEach(function(fn){ try{ fn(); }catch(e){} }); }
+      var tok = getTok(); if(!tok){ done(); return; }
+      var entry = qLoad()[key];
+      if(!entry){ done(); return; }
+      var need = entryItems(c, entry).filter(function(it){
+        return !((entry.runs||[]).some(function(r){ return r.plat===it.plat; }));
+      });
+      if(!need.length){ done(); return; }
+      var t0 = entry.ts || Date.now();
+      var byWf = {}; need.forEach(function(it){ (byWf[it.wf]=byWf[it.wf]||[]).push(it.plat); });
+      Promise.all(Object.keys(byWf).map(function(wf){
+        return fetch('https://api.github.com/repos/'+REPO+'/actions/workflows/'+encodeURIComponent(wf)+'/runs?event=workflow_dispatch&per_page=20',
+          { headers:{ 'Authorization':'Bearer '+tok, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' } })
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(j){ return { wf: wf, runs: (j&&j.workflow_runs)||[] }; })
+          .catch(function(){ return { wf: wf, runs: [] }; });
+      })).then(function(resps){
+        var claim = claimedRunIds();
+        var o = qLoad(); var e = o[key]; if(!e){ done(); return; }
+        e.runs = e.runs || [];
+        var have = {}; e.runs.forEach(function(r){ have[r.plat]=1; });
+        resps.forEach(function(rp){
+          var cands = rp.runs.filter(function(run){
+            var created = Date.parse(run.created_at || run.run_started_at || 0);
+            var active = ['queued','in_progress','requested','waiting','pending','action_required'].indexOf(run.status) >= 0;
+            return active && created >= (t0 - 12000) && !claim[run.id];
+          }).sort(function(a,b){ return Date.parse(b.created_at) - Date.parse(a.created_at); });
+          (byWf[rp.wf]||[]).forEach(function(plat){
+            if(have[plat]) return;
+            var run = cands.shift(); if(!run) return;
+            e.runs.push({ wf: rp.wf, plat: plat, id: run.id, url: run.html_url, status: run.status });
+            claim[run.id] = 1; have[plat] = 1;
+          });
+        });
+        o[key] = e; qSave(o);
+        var gotAll = entryItems(c, e).every(function(it){ return (e.runs||[]).some(function(r){ return r.plat===it.plat; }); });
+        if(!gotAll && attempt < 5){ setTimeout(function(){ captureRuns(c, sha, attempt+1, null); }, 2000); }
+        else { done(); }
+      });
     }
     function applyQueued(){
       // Re-apply remembered queued badges after each (auto-)reload. An entry is
@@ -683,6 +816,7 @@ run_dialog = (r"""
       });
       if(changed) qSave(o);
       if(live > 0) qArmReload();
+      qRenumber();
     }
     function runNow(){
       var def = RT[state.cap]; if(!def) return;
@@ -691,6 +825,7 @@ run_dialog = (r"""
       if(!getTok()){ showTokenPanel(); return; }
       var go = $("cidash-run-go"); if(go){ go.disabled = true; }
       setStatus('Queuing\u2026', null);
+      var t0 = Date.now();   // dispatch start — used to match the new run(s) for cancel
       var jobs = sel.map(function(k){ var p=def.platforms[k];
         return dispatchOne(p.wf, filledInputs(p)).then(function(res){ res.plat=k; return res; }); });
       Promise.all(jobs).then(function(results){
@@ -701,7 +836,7 @@ run_dialog = (r"""
         // Reflect any successful dispatch on the dashboard right away, before the
         // server-side status/Pages rebuild catches up (covers partial success too).
         var okPlats = results.filter(function(r){return r.ok;}).map(function(r){return r.plat;});
-        if(okPlats.length){ markQueued(state.cap, state.sha, okPlats); }
+        if(okPlats.length){ markQueued(state.cap, state.sha, okPlats, state.parent, t0); captureRuns(state.cap, state.sha); }
         if(results.every(function(r){return r.ok;})){
           var n=results.length;
           setStatus('\u2713 Queued '+n+' run'+(n>1?'s':'')+'. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'ok');
@@ -778,7 +913,7 @@ run_dialog = (r"""
       var pre = $("cidash-run-cmd"); if(!pre || !navigator.clipboard) return;
       navigator.clipboard.writeText(pre.textContent);
     };
-    window.cidashRunClose = function(){ var m=$("cidash-run-modal"); if(m){ m.style.display='none'; document.body.style.overflow=''; } };
+    window.cidashRunClose = function(){ var m=$("cidash-run-modal"); if(m){ m.style.display='none'; } if(!qModalOpen()){ document.body.style.overflow=''; } };
     function openRun(c, sha, parent, short){
       if(!RT[c]) return;
       state = {cap:c, sha:sha||'', parent:parent||'', short:short||''};
@@ -787,13 +922,132 @@ run_dialog = (r"""
       $("cidash-run-modal").style.display='block';
       document.body.style.overflow='hidden';
     }
+    // ── Manage a queued run: view it on GitHub, or cancel it ──────
+    // Clicking a "Queued" badge opens this dialog (rather than jumping straight to
+    // the Actions tab) so the user can either follow the run or stop it. Cancel
+    // POSTs the runs/{id}/cancel REST API with the same browser token used to queue.
+    var qState = { cap:null, sha:'' };
+    function qModalOpen(){ var m=$("cidash-q-modal"); return !!(m && m.style.display==='block'); }
+    function runModalOpen(){ var m=$("cidash-run-modal"); return !!(m && m.style.display==='block'); }
+    window.cidashQClose = function(){ var m=$("cidash-q-modal"); if(m){ m.style.display='none'; } qState={cap:null,sha:''}; if(!runModalOpen()){ document.body.style.overflow=''; } };
+    function qSetStatus(html, kind){
+      var s = $("cidash-q-status"); if(!s) return;
+      var col = kind==='ok' ? '#3fb950' : (kind==='err' ? '#f85149' : (kind==='warn' ? '#d29922' : 'var(--fg-muted)'));
+      s.style.color = col; s.innerHTML = html || '';
+    }
+    function qViewLinks(c, entry){
+      // Prefer a direct link to each captured run; else the workflow's runs page
+      // (or the repo's Actions tab) so "view" always works even before capture.
+      var def = RT[c]; var runs = (entry && entry.runs) || []; var multi = Object.keys(def.platforms).length > 1;
+      var out = [];
+      if(runs.length){
+        runs.forEach(function(r){
+          var nm = multi ? cap(r.plat) : def.label;
+          out.push('<a class="cidash-btn cidash-ghost" style="text-decoration:none" href="'+esc(r.url||('https://github.com/'+REPO+'/actions'))+'" target="_blank" rel="noopener">View '+esc(nm)+' run \u2197</a>');
+        });
+      } else {
+        var seen = {};
+        (entry.plats||[]).forEach(function(plat){
+          var p = def.platforms[plat]; if(!p || seen[p.wf]) return; seen[p.wf]=1;
+          out.push('<a class="cidash-btn cidash-ghost" style="text-decoration:none" href="'+actionsUrl(p.wf)+'" target="_blank" rel="noopener">View '+esc(def.label)+' runs \u2197</a>');
+        });
+        if(!out.length){ out.push('<a class="cidash-btn cidash-ghost" style="text-decoration:none" href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener">View on GitHub Actions \u2197</a>'); }
+      }
+      return out.join('');
+    }
+    function renderQ(){
+      var c = qState.cap, sha = qState.sha; if(!c) return;
+      var o = qLoad(); var entry = o[c+'|'+sha]; var def = RT[c];
+      if(!entry || !def){ cidashQClose(); return; }
+      var plats = (entry.plats||[]).map(cap).join(', ');
+      var short = entry.short || sha.slice(0,7);
+      var live = qLiveEntries(o); var pos = 0;
+      live.forEach(function(en, idx){ if(en.key===c+'|'+sha) pos = idx+1; });
+      var h = '';
+      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em"><strong>'+esc(def.label)+'</strong> for commit <code style="font-family:monospace">'+esc(short)+'</code>'+(plats?' \u00b7 '+esc(plats):'')+'.</p>';
+      if(live.length>1 && pos){ h += '<p style="margin:0 0 12px;font-size:.85em">Place in queue: <strong>#'+pos+'</strong> <span style="color:var(--fg-muted)">of '+live.length+' queued from this browser (oldest first).</span></p>'; }
+      h += '<div id="cidash-q-status" style="font-size:.82em;min-height:1.2em;margin:0 0 12px"></div>';
+      h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
+      h += qViewLinks(c, entry);
+      h += '<button class="cidash-btn cidash-danger" id="cidash-q-cancel">\u2715 Cancel run</button>';
+      h += '</div>';
+      h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0"><strong>Cancel run</strong> stops it on GitHub Actions (uses the same token you queued it with). <strong>View</strong> opens it on GitHub, where you can watch it or stop it manually.</p>';
+      $("cidash-q-body").innerHTML = h;
+      var cb=$("cidash-q-cancel"); if(cb) cb.addEventListener('click', function(){ cancelQueued(c, sha); });
+    }
+    function openQ(c, sha){
+      if(!RT[c]) return;
+      qState = { cap:c, sha:sha };
+      var entry = qLoad()[c+'|'+sha];
+      $("cidash-q-title").textContent = "Queued: " + RT[c].label;
+      renderQ();
+      $("cidash-q-modal").style.display='block';
+      document.body.style.overflow='hidden';
+      // Look up the run id(s) now (if not captured yet) so Cancel + the direct run
+      // links resolve; re-render when they arrive.
+      if(entry && !((entry.runs||[]).length)){
+        captureRuns(c, sha, 1, function(){ if(qState.cap===c && qState.sha===sha) renderQ(); });
+      }
+    }
+    function cancelQueued(c, sha){
+      var entry = qLoad()[c+'|'+sha]; if(!entry){ cidashQClose(); return; }
+      if(!getTok()){ qSetStatus('No token in this browser \u2014 use \u201cView on GitHub Actions\u201d to cancel it there.', 'warn'); return; }
+      var btn = $("cidash-q-cancel"); if(btn){ btn.disabled = true; }
+      var runs = (entry.runs||[]).filter(function(r){ return r && r.id; });
+      if(runs.length){ doCancel(c, sha, runs); return; }
+      // No run id captured yet — try one more lookup before giving up.
+      qSetStatus('Finding the run\u2026', null);
+      captureRuns(c, sha, 1, function(){
+        var r2 = ((qLoad()[c+'|'+sha]||{}).runs||[]).filter(function(r){ return r && r.id; });
+        if(!r2.length){ if(btn){ btn.disabled=false; } qSetStatus('Could not find the run automatically \u2014 use \u201cView on GitHub Actions\u201d to cancel it there.', 'err'); return; }
+        doCancel(c, sha, r2);
+      });
+    }
+    function doCancel(c, sha, runs){
+      var tok = getTok();
+      qSetStatus('Cancelling\u2026', null);
+      var jobs = runs.map(function(r){
+        return fetch('https://api.github.com/repos/'+REPO+'/actions/runs/'+r.id+'/cancel', {
+          method:'POST', headers:{ 'Authorization':'Bearer '+tok, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' }
+        }).then(function(resp){ return { id:r.id, ok:(resp.status===202||resp.status===409), status:resp.status }; })
+          .catch(function(){ return { id:r.id, ok:false, status:0 }; });
+      });
+      Promise.all(jobs).then(function(res){
+        var btn = $("cidash-q-cancel");
+        if(res.some(function(r){return r.status===401;})){ clearTok(); if(btn){ btn.disabled=false; } qSetStatus('That token was rejected (401). Re-queue with a valid token, or cancel it on GitHub.', 'err'); return; }
+        if(res.every(function(r){return r.ok;})){
+          qForget(c, sha);
+          qSetStatus('\u2713 Cancelled \u2014 the run is stopping on GitHub.', 'ok');
+          setTimeout(cidashQClose, 1100);
+        } else {
+          if(btn){ btn.disabled=false; }
+          var has403 = res.some(function(r){return r.status===403;});
+          var hint = has403 ? ' The token needs <strong>Actions: Read and write</strong> on this repo.' : '';
+          qSetStatus('Could not cancel ('+res.map(function(r){return 'HTTP '+r.status;}).join(', ')+').'+hint+' Use \u201cView on GitHub Actions\u201d to stop it there.', 'err');
+        }
+      });
+    }
     document.addEventListener('click', function(e){
       var a = e.target.closest ? e.target.closest('a.cidash-run') : null;
       if(!a) return;
       e.preventDefault();
       openRun(a.getAttribute('data-cap'), a.getAttribute('data-sha'), a.getAttribute('data-parent'), a.getAttribute('data-short'));
     });
-    document.addEventListener('keydown', function(e){ if(e.key==='Escape') cidashRunClose(); });
+    document.addEventListener('click', function(e){
+      var b = e.target.closest ? e.target.closest('.cidash-queued') : null;
+      if(!b) return;
+      e.preventDefault();
+      var td = b.closest ? b.closest('td') : null; if(!td) return;
+      openQ(td.getAttribute('data-qcap'), td.getAttribute('data-qsha'));
+    });
+    document.addEventListener('keydown', function(e){
+      if((e.key==='Enter' || e.key===' ') && e.target && e.target.classList && e.target.classList.contains('cidash-queued')){
+        e.preventDefault();
+        var td = e.target.closest ? e.target.closest('td') : null;
+        if(td) openQ(td.getAttribute('data-qcap'), td.getAttribute('data-qsha'));
+      }
+    });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if(qModalOpen()) cidashQClose(); else cidashRunClose(); } });
     // Re-apply optimistic "Queued" badges once the table exists (this script runs
     // before the table is parsed), and after every auto-refresh thereafter.
     if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', applyQueued); }
