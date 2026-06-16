@@ -1,11 +1,23 @@
 {
   "schemaVersion": 1,
-  "version": "1.7.6",
+  "version": "1.7.7",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "1.7.7",
+        "date": "2026-06-15",
+        "title": "See a queued run's place in line, and cancel it from the dashboard",
+        "summary": "When you queue several runs with Run now, each Queued cell now shows a small position number (#1, #2, ...) so you can see the order they are lined up in. Clicking a Queued badge no longer jumps straight to GitHub - it opens a small dialog where you can either follow the run on GitHub Actions or cancel it. Cancel stops the run for you from the browser, using the same fine-grained token that queued it (Actions: Read and write): the dialog finds the run the dispatch created, cancels every platform it launched, and clears the cell so it is ready to run again. If no token is available it points you to the run on GitHub so you can stop it there.",
+        "highlights": [
+          "Queued cells show a #N place-in-line chip (oldest first) when more than one run is waiting, so a batch of dispatches is easy to read at a glance.",
+          "Clicking a Queued badge opens a manage dialog instead of leaving the dashboard: view the run on GitHub Actions, or cancel it.",
+          "Cancel stops the queued run(s) straight from the browser - including both platforms when you launched Windows and Linux - then restores the cell's run button.",
+          "Uses the same browser-stored token as Run now; a token-free path links you to the run on GitHub to stop it manually."
+        ]
+      },
       {
         "version": "1.7.6",
         "date": "2026-06-15",
