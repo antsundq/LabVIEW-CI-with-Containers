@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "sha": "1d78d4f805cbbeabb95fbbd183d6232478ccd487",
+    "short": "1d78d4f",
+    "platform": "windows",
+    "repo": "elijah286/LabVIEW-CI-with-Containers",
+    "pages_url": "https://elijah286.github.io/LabVIEW-CI-with-Containers",
+    "commit": {
+      "message": "diag(vi-analyzer): broaden test-suite search + dump LabVIEW layout when missing",
+      "author": "elijah286",
+      "date": "2026-06-16T11:14:24-05:00"
+    },
+    "generated_utc": "2026-06-16 16:39 UTC",
+    "analysis_date": "",
+    "duration": ""
+  },
+  "summary": {
+    "vis_analyzed": 0,
+    "tests_run": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "findings": 0,
+    "vis_with_findings": 0
+  },
+  "errors": {
+    "vi_not_loadable": 0,
+    "test_not_loadable": 0,
+    "test_not_runnable": 0,
+    "test_error_out": 0
+  },
+  "rule_counts": []
+}
