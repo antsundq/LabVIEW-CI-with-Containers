@@ -12,6 +12,8 @@ on:
       - '.github/pages/index.html'
       - '.github/pages/vi-browser.html'
       - '.github/pages/vi-interactive.html'
+      - '.github/pages/faq.html'
+      - '.github/pages/lvci-header.js'
       - '.github/workflows/dashboard-pages.yml'
       # Rebuild when the shared dashboard action (generator or its bundled pages)
       # changes, so this repo's own dashboard always reflects the latest tooling.
