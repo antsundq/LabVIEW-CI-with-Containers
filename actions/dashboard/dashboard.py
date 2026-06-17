@@ -6,6 +6,17 @@ token    = os.environ['GH_TOKEN']
 repo     = os.environ['REPO']
 pages_url = os.environ['PAGES_URL']
 
+_default_branch = None
+
+def get_default_branch():
+    """Query the repo's default branch from GitHub. Cached to avoid repeated calls."""
+    global _default_branch
+    if _default_branch is not None:
+        return _default_branch
+    repo_info = gh_get('')
+    _default_branch = repo_info.get('default_branch', 'main') if repo_info else 'main'
+    return _default_branch
+
 def gh_get(path):
     url = f"https://api.github.com/repos/{repo}/{path}"
     req = urllib.request.Request(url, headers={
@@ -103,8 +114,9 @@ _PROJECT_TARGET = 30    # keep paging until this many project revisions are foun
 _SCAN_CAP       = 500   # never classify more than this many commits (cost guard)
 def fetch_commits():
     out, n_proj, n_scanned, page = [], 0, 0, 1
+    branch = get_default_branch()
     while n_scanned < _SCAN_CAP:
-        batch = gh_get(f'commits?sha=main&per_page=100&page={page}') or []
+        batch = gh_get(f'commits?sha={branch}&per_page=100&page={page}') or []
         if not batch:
             break
         for c in batch:
