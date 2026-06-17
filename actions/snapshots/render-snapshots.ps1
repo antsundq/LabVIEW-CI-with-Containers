@@ -239,7 +239,7 @@ foreach ($line in $lines) {
                 & $CliExe `
                     -OperationName                PrintToImagesJson `
                     -LabVIEWPath                  $ResolvedLV `
-                    -AdditionalOperationDirectory $ImagesOp `
+                    -AdditionalOperationDirectory $OpsDir `
                     -LogToConsole                 TRUE `
                     -VI                           $ViPath `
                     -OutputPath                   $JsonOut `

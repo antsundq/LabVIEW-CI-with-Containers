@@ -89,23 +89,43 @@ clients. (If you would rather bake scripting into a custom image instead, you wo
 have to switch the snapshot job off the stock image onto that image; the runtime
 approach avoids that and keeps the snapshot container lightweight.)
 
-## Remaining step (must be done in the LabVIEW IDE — needs Windows + LabVIEW)
+## Remaining step (must be done in the LabVIEW IDE — needs Windows + LabVIEW 2026)
 
 `Convert.vi` is a plain VI (lvctl runs it over VI Server). LabVIEWCLI has no
-generic "run a VI" operation, so wrap it as a custom operation, exactly like the
-sibling `PrintToSingleFileHtml`:
+generic "run a VI" operation, and COM cannot drive a headless LabVIEW in the
+container (proven dead three ways — see the repo memo), so the only headless path
+is to wrap `Convert.vi` in a custom LabVIEWCLI operation, exactly like the sibling
+`../PrintToSingleFileHtml` (itself vendored from NI's `labview-for-containers`).
+This is the one step that cannot be done on macOS; everything else is wired.
 
-1. Copy the `PrintToSingleFileHtml` operation folder to `PrintToImagesJson`
-   (operation class + `RunOperation.vi`, `Parse inputs.vi`, `GetHelp.vi`, …).
-2. In `RunOperation.vi`, replace the "print to HTML" body with a call to
-   `toimages/Convert.vi`: set **VI Path in** = the `-VI` argument, run it, and
-   write the **JSON out** string to the `-OutputPath` argument (UTF-8, no BOM).
-3. Keep the same CLI surface PrintToSingleFileHtml uses
-   (`-VI <path> -OutputPath <path> -Headless -o -c`) so the existing hook in
-   `render-snapshots.ps1` drives it with no further script changes.
-4. Commit the `PrintToImagesJson` folder beside `PrintToSingleFileHtml`. On the
+The operation is binary VIs, so duplicate it **inside LabVIEW** (a raw filesystem
+copy + rename breaks the compiled class links):
+
+1. On Windows + LabVIEW 2026, open `.github/labview/PrintToSingleFileHtml/`
+   `PrintToSingleFileHtml.lvclass`. Use **File ▸ Save As ▸ rename** on the class
+   (and let LabVIEW save renamed copies of the member VIs) to create
+   `.github/labview/PrintToImagesJson/PrintToImagesJson.lvclass`. It MUST be a
+   sibling folder of `PrintToSingleFileHtml` under `.github/labview/`, because the
+   hook passes `-AdditionalOperationDirectory .github\labview` (the parent) and
+   LabVIEWCLI finds the op by the `PrintToImagesJson` folder name.
+2. Edit the new `RunOperation.vi`. It already parses the CLI args and gives you the
+   target VI path (`-VI`) and the output path (`-OutputPath`). Replace the
+   "print to HTML" middle (the `Open VI` ▸ `Print to temp file` ▸ base64 chain)
+   with one call to `..\toimages\Convert.vi`:
+   - wire the `-VI` path string  ->  Convert.vi **`VI Path in`**
+   - run it (it is already a subVI call; just wait for it to finish)
+   - wire Convert.vi **`JSON out`** (string)  ->  the existing file-write that
+     targets `-OutputPath` (write UTF-8, no BOM). The HTML-only helpers
+     (`Print to temp file.vi`, `base64_fast_encode.vi`) can be left unused.
+3. Keep the CLI surface identical (`-VI <path> -OutputPath <path> -Headless -o -c`)
+   so the hook in `render-snapshots.ps1` drives it unchanged. (`Enable-LVScripting`
+   already merges the scripting tokens into `LabVIEW.ini` at runtime, which
+   `Convert.vi` needs to walk the diagram.)
+4. Save **all** for LabVIEW 2026 and commit the `PrintToImagesJson` folder. On the
    next snapshot run, newly-rendered VIs gain a `<blob>.json` and the VI Browser
-   shows them in place. To populate already-rendered VIs, clear `by-blob/` (or run
+   shows them in place. To backfill already-rendered VIs, clear `by-blob/` (or run
    the snapshots workflow in `backfill` mode) so they re-render with JSON.
 
-Note: the snapshot container runs LabVIEW 2026; save these VIs for that version.
+Tip: validate one VI locally first —
+`LabVIEWCLI -OperationName PrintToImagesJson -AdditionalOperationDirectory <repo>\.github\labview -VI <some.vi> -OutputPath out.json -Headless -o -c`
+then open `vi-interactive.html?frames=out.json` to confirm `vi-render.js` accepts it.
