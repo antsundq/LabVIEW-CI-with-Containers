@@ -7,7 +7,10 @@ repo     = os.environ['REPO']
 pages_url = os.environ['PAGES_URL']
 
 def gh_get(path):
-    url = f"https://api.github.com/repos/{repo}/{path}"
+    # NOTE: an empty path must hit the bare repo endpoint (…/repos/{repo}); a
+    # trailing slash (…/repos/{repo}/) makes GitHub return 404, which silently
+    # broke get_default_branch() below. Only join the '/' when there IS a path.
+    url = f"https://api.github.com/repos/{repo}" + (f"/{path}" if path else "")
     req = urllib.request.Request(url, headers={
         'Authorization': f'token {token}',
         'Accept': 'application/vnd.github+json',
@@ -19,6 +22,21 @@ def gh_get(path):
     except urllib.error.HTTPError as e:
         print(f"  HTTP {e.code} for {path}", file=sys.stderr)
         return None
+
+# ── Resolve the repo's default branch (NOT hard-coded 'main') ─────
+# Consumers commonly use 'master' or other default branches. Hard-coding 'main'
+# made fetch_commits() request commits from a branch that doesn't exist, so the
+# dashboard came up EMPTY on every non-'main' repo. Query the repo's real default
+# branch once (cached); fall back to 'main' only if the lookup fails.
+_default_branch = None
+
+def get_default_branch():
+    global _default_branch
+    if _default_branch is not None:
+        return _default_branch
+    repo_info = gh_get('')
+    _default_branch = repo_info.get('default_branch', 'main') if repo_info else 'main'
+    return _default_branch
 
 # ── Fetch a JSON file straight from the deployed Pages site ─────
 # Used to read each commit's per-platform VIDiff changes.json so the
@@ -103,8 +121,9 @@ _PROJECT_TARGET = 30    # keep paging until this many project revisions are foun
 _SCAN_CAP       = 500   # never classify more than this many commits (cost guard)
 def fetch_commits():
     out, n_proj, n_scanned, page = [], 0, 0, 1
+    branch = get_default_branch()
     while n_scanned < _SCAN_CAP:
-        batch = gh_get(f'commits?sha=main&per_page=100&page={page}') or []
+        batch = gh_get(f'commits?sha={branch}&per_page=100&page={page}') or []
         if not batch:
             break
         for c in batch:
@@ -1354,7 +1373,6 @@ for _name, _dst in [
     ('whats-new.html', 'ci-out/dashboard/whats-new.html'),
     ('configure.html', 'ci-out/dashboard/configure.html'),
     ('integrate.html', 'ci-out/dashboard/integrate.html'),
-    ('faq.html', 'ci-out/dashboard/faq.html'),
 ]:
     _stage(os.path.join(_pages_src, _name), _dst)
 # Deploy a catalog.json at the Pages root so the version badge + What's New can
