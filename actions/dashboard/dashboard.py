@@ -196,6 +196,11 @@ RUN_TARGETS = {
         'linux':   {'wf': 'vidiff-linux-container.yml',   'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}}}},
     'snapshots': {'label': 'VI Snapshots', 'platforms': {
         'all': {'wf': 'vi-snapshots.yml', 'inputs': {'mode': 'head'}}}},
+    # Unit tests run in the Windows worker only: Caraya and VI Tester are
+    # VIPM packages (Windows-only). The runner emits JUnit that
+    # build-unittest-report.py normalises into one report.
+    'unit-tests': {'label': 'Unit Tests', 'platforms': {
+        'windows': {'wf': 'unit-tests-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}}}},
 }
 import json as _json
 run_targets_json = _json.dumps(RUN_TARGETS)
@@ -493,10 +498,12 @@ for c in commits_data:
     # VI Tester / Caraya) once a runner posts the "CI / Unit Tests" status. The
     # capability is currently "planned" (no runner workflow yet), so this shows a
     # neutral placeholder until results exist; WHICH framework ran belongs in the
-    # test report as metadata, not as separate per-framework columns. When the
-    # runner lands, add 'unit-tests' to RUN_TARGETS and pass cap=/doc= here to
-    # enable the Run-now button and a framed report.
-    unit_badge = badge('tests', 'CI / Unit Tests')
+    # test report as metadata, not as separate per-framework columns. Now that
+    # the runner exists, cap='unit-tests' makes an empty cell a Run-now glyph
+    # (dispatches unit-tests-windows-container.yml) and doc= frames the report
+    # in the shared chrome (report-viewer), like the other per-revision reports.
+    unit_badge = badge('tests', 'CI / Unit Tests', cap='unit-tests',
+                       doc=('unit-tests-report', 'unit-tests'))
 
     rows_html.append(f"""
     <tr data-project="{proj_flag}">
@@ -1897,6 +1904,7 @@ for _name, _dst in [
     ('whats-new.html', 'ci-out/dashboard/whats-new.html'),
     ('configure.html', 'ci-out/dashboard/configure.html'),
     ('integrate.html', 'ci-out/dashboard/integrate.html'),
+    ('unit-tests.html', 'ci-out/dashboard/unit-tests.html'),
 ]:
     _stage(os.path.join(_pages_src, _name), _dst)
 # Deploy a catalog.json at the Pages root so the version badge + What's New can

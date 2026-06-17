@@ -337,6 +337,7 @@
     about: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><line x1="12" y1="16" x2="12" y2="11.5"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
     news: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M11.5 3l1.8 5.2 5.2 1.8-5.2 1.8L11.5 17l-1.8-5.2L4.5 10l5.2-1.8z"/><path d="M18 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>',
     history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l4 2"/></svg>',
+    tests: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6L5.4 17.5A1.5 1.5 0 0 0 6.7 20h10.6a1.5 1.5 0 0 0 1.3-2.5L14 9V3"/><line x1="7.5" y1="14" x2="16.5" y2="14"/></svg>',
     sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 1.8v2.4M12 19.8v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M1.8 12h2.4M19.8 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>',
     moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
     system: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="19" height="13" rx="2"/><line x1="8.5" y1="20.5" x2="15.5" y2="20.5"/><line x1="12" y1="16.5" x2="12" y2="20.5"/></svg>'
@@ -404,12 +405,11 @@
   // ── Primary navigation (the durable site sections). Data-driven so future
   //    capabilities — Builds, Documentation, Unit Tests — are a one-line add. ─
   var NAV = [
-    { key: 'dashboard',  label: 'Dashboard',  href: base + '/' },
-    { key: 'vi-browser', label: 'VI Browser', href: base + '/vi-snapshots/' }
+    { key: 'dashboard',   label: 'Dashboard',    href: base + '/' },
+    { key: 'vi-browser',  label: 'VI Browser',   href: base + '/vi-snapshots/' }
     // Future (uncomment / extend as capabilities land):
     // { key: 'builds', label: 'Builds', href: base + '/builds/', soon: true },
-    // { key: 'docs',   label: 'Docs',   href: base + '/docs/',   soon: true },
-    // { key: 'tests',  label: 'Tests',  href: base + '/tests/',  soon: true }
+    // { key: 'docs',   label: 'Docs',   href: base + '/docs/',   soon: true }
   ];
   // Which nav item is "current" for each context (drives the active pill).
   var NAV_ACTIVE = {
@@ -417,6 +417,8 @@
     'vi-browser': 'vi-browser',
     'vi-analyzer-report': 'dashboard',
     'masscompile-report': 'dashboard',
+    'unit-tests-report': 'dashboard',
+    'unit-tests-config': 'dashboard',
     'worker-manifest': 'dashboard',
     'report-viewer': 'dashboard',
     'configure': 'dashboard',
@@ -446,6 +448,12 @@
       regenLabel: 'Regenerate report', rawLabel: 'Raw log', rawName: 'masscompile.log',
       workflow: { windows: 'masscompile-windows-container.yml',
                   linux:   'masscompile-linux-container.yml' }
+    },
+    'unit-tests-report': {
+      prefix: 'unit-tests', cap: 'unit-tests', label: 'Unit Tests',
+      regenLabel: 'Re-run tests', rawLabel: 'Test results (JSON)', rawName: 'results.json',
+      workflow: { windows: 'unit-tests-windows-container.yml',
+                  linux:   'unit-tests-linux-container.yml' }
     }
   };
   var DOC = DOCTYPES[ctx] || null;   // non-null only on a per-revision report
@@ -492,6 +500,7 @@
       'dashboard': [
         { label: 'Populate history', svg: ICON.history, kind: 'runhistory' },
         { label: 'Configure Workers', svg: ICON.configure, kind: 'configure' },
+        { label: 'Unit Testing', svg: ICON.tests, kind: 'unittests' },
         { label: 'About', svg: ICON.about, href: base + '/faq.html' }
       ],
       'worker-manifest': [],
@@ -512,6 +521,7 @@
   function openPage(kind) {
     var map = {
       configure: { src: 'configure.html' + (repo ? ('?repo=' + encodeURIComponent(repo)) : ''), title: 'Configure Workers' },
+      unittests: { src: 'unit-tests.html' + (repo ? ('?repo=' + encodeURIComponent(repo)) : ''), title: 'Unit Testing' },
       integrate: { src: 'integrate.html', title: 'Apply to New Repo' }
     };
     var t = map[kind]; if (!t) return;
@@ -631,7 +641,7 @@
     el.innerHTML = iconHtml(a) + esc(a.label);
     if (!a.href) {
       el.addEventListener('click', function () {
-        if (a.kind === 'configure' || a.kind === 'integrate') openPage(a.kind);
+        if (a.kind === 'configure' || a.kind === 'integrate' || a.kind === 'unittests') openPage(a.kind);
         else if (a.kind === 'rerun') rerun();
         else if (a.kind === 'runhistory') runHistory();
       });
@@ -836,7 +846,7 @@
           el = document.createElement('button');
           el.type = 'button';
           el.addEventListener('click', function () {
-            if (a.kind === 'configure' || a.kind === 'integrate') openPage(a.kind);
+            if (a.kind === 'configure' || a.kind === 'integrate' || a.kind === 'unittests') openPage(a.kind);
             else if (a.kind === 'runhistory') runHistory();
             closeDD();
           });

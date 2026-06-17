@@ -94,9 +94,9 @@ jobs:
           # Preserve provenance fields from any existing manifest.
           mpath = pathlib.Path('.github/labview-ci.yml')
           prev = {'activities': [], 'installedVersion': '', 'repo': '', 'ref': 'main',
-                  'container_use': '', 'vipc': [], 'actions': {}, 'triggers': {}}
+                  'container_use': '', 'vipc': [], 'actions': {}, 'triggers': {}, 'unitTests_block': []}
           if mpath.exists():
-              in_acts = False; in_container = False; in_vipc = False; in_actions = False; in_triggers = False; cur_vipc = None
+              in_acts = False; in_container = False; in_vipc = False; in_actions = False; in_triggers = False; in_ut = False; cur_vipc = None
               for line in mpath.read_text(encoding='utf-8').splitlines():
                   if re.match(r'^\s*activities:\s*$', line):
                       in_acts = True; in_container = False; in_vipc = False; in_actions = False; in_triggers = False; continue
@@ -104,6 +104,13 @@ jobs:
                       in_container = True; in_acts = False; in_vipc = False; in_actions = False; in_triggers = False; continue
                   if re.match(r'^\s*triggers:\s*$', line):
                       in_triggers = True; in_acts = False; in_container = False; in_vipc = False; in_actions = False; continue
+                  if re.match(r'^unitTests:\s*$', line):
+                      in_ut = True; in_acts = False; in_container = False; in_vipc = False; in_actions = False; in_triggers = False
+                      prev['unitTests_block'] = [line]; continue
+                  if in_ut:
+                      if re.match(r'^\s+\S', line):
+                          prev['unitTests_block'].append(line); continue
+                      in_ut = False
                   if in_acts:
                       m = re.match(r'^\s*-\s*(\S+)', line)
                       if m: prev['activities'].append(m.group(1)); continue
@@ -215,6 +222,10 @@ jobs:
               for _id in sorted(triggers):
                   lines.append(f'    {_id}: {triggers[_id]}')
           lines += ['activities:'] + [f'  - {a}' for a in acts] + ['']
+          # Preserve the unit-test tool config (written by the Unit Testing page);
+          # reconfigure manages activities/container only, so keep it verbatim.
+          if prev.get('unitTests_block'):
+              lines += prev['unitTests_block'] + ['']
           mpath.parent.mkdir(parents=True, exist_ok=True)
           mpath.write_text('\n'.join(lines), encoding='utf-8')
           print('Wrote', mpath)
