@@ -9,8 +9,11 @@ config:
   labviewVersion: "2026"
   os: [windows, linux]
   concurrency:
-    # Default to GitHub's free-tier concurrent-job limit (20).
-    maxParallel: 20
+    # Per-repo cap on parallel CI jobs. NOTE: GitHub's real concurrency limit is
+    # per ACCOUNT, not per repo (Free 20, Pro 40, Team 60, Enterprise 500 jobs
+    # shared across ALL your repos), and routine submissions/upgrades draw from
+    # that same pool -- so keep this modest. Default 5.
+    maxParallel: 5
 activities:
   - dashboard
   - masscompile

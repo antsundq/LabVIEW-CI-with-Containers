@@ -157,9 +157,9 @@
         <p>LabVIEW CI itself is free and open-source. Running CI on GitHub costs:</p>
         <ul>
           <li><strong>Public repositories:</strong> free (unlimited Actions minutes on GitHub-hosted runners)</li>
-          <li><strong>Private repositories:</strong> counts against your GitHub Actions quota (2,000 free minutes/month for GitHub Pro)</li>
+          <li><strong>Private repositories:</strong> counts against your GitHub Actions minutes quota (2,000/month included on Free, 3,000/month on Pro and Team)</li>
         </ul>
-        <p>You can configure the max concurrent runners to stay within quota if needed.</p>
+        <p>You can lower the max concurrent runners to stay within quota. Keep in mind that GitHub's concurrency limit &mdash; how many jobs run at once (Free 20, Pro 40, Team 60, Enterprise 500) &mdash; is <strong>per account and shared across all your repositories</strong>, not per repo, and routine submissions and tooling upgrades draw from that same pool. That's why the per-repo runner cap defaults to a conservative value.</p>
       </div>
     </div>
 

@@ -22,9 +22,9 @@ on:
         type: boolean
         default: true
       concurrent_runners:
-        description: 'Max concurrent runners (20 = GitHub Free limit)'
+        description: 'Per-repo cap on parallel CI jobs. GitHub limits concurrency per ACCOUNT (Free 20, Pro 40, Team 60, Enterprise 500) shared across all your repos, so keep it modest. Default 5.'
         required: false
-        default: '20'
+        default: '5'
       activities:
         description: 'Comma-separated capability ids (blank = keep current)'
         required: false
