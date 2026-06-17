@@ -912,6 +912,17 @@ run_dialog = (r"""
         + 'title="Queued from this browser \u2014 click to view it on GitHub or cancel it">'
         + '<span class="run-spin"></span>Queued<span class="cidash-qpos"></span></span>';
     }
+    function qPaintFailed(td, c, sha){
+      // A run we CONFIRMED failed on GitHub: replace the spinner with a sticky red
+      // "Failed" badge (same button affordance as Queued, so clicking opens the
+      // manage dialog to view the run or dismiss it). Never reverts on its own.
+      if(!td) return;
+      td.classList.add('cidash-queued-cell');
+      td.setAttribute('data-qcap', c); td.setAttribute('data-qsha', sha);
+      td.innerHTML = '<span class="run-badge cidash-queued cidash-failed" role="button" tabindex="0" '
+        + 'title="This run failed \u2014 click to view it on GitHub or dismiss it">'
+        + '\u2717 Failed</span>';
+    }
     function qArmReload(){
       // While a queued run is still unconfirmed, reload sooner than the lazy
       // meta-refresh so the real status surfaces promptly (mirrors the server's
@@ -920,10 +931,13 @@ run_dialog = (r"""
       setTimeout(function(){ location.reload(); }, QFAST);
     }
     function qLiveEntries(o){
-      // The non-expired queued entries, oldest first — this IS the queue order.
+      // The still-queued entries, oldest first - this IS the queue order. A failed
+      // entry is terminal (shown as "Failed") so it is no longer "in line". An
+      // entry stays while inside the optimistic window OR while qSync still sees a
+      // real run active (e.activeAt), so a slow backfill keeps its place.
       var now = Date.now();
       return Object.keys(o)
-        .filter(function(k){ var e=o[k]; return e && (now-(e.ts||0))<=QTTL; })
+        .filter(function(k){ var e=o[k]; return e && !e.failed && ((now-(e.ts||0))<=QTTL || (e.activeAt && (now-e.activeAt)<=QTTL)); })
         .map(function(k){ return { key:k, ts:o[k].ts||0 }; })
         .sort(function(a,b){ return a.ts - b.ts; });
     }
@@ -1042,32 +1056,109 @@ run_dialog = (r"""
         else { done(); }
       });
     }
+    function captureSnapshotRun(t0, attempt){
+      // The "Populate history" backfill is ONE snapshots run that walks the whole
+      // history, so every "snapshots|<sha>" entry shares it. captureRuns' per-cell
+      // claim would hand the single run to just the first sha, so look it up once
+      // and write it into EVERY snapshot entry still missing a run id.
+      var tok = getTok(); if(!tok) return;
+      t0 = t0 || Date.now(); attempt = attempt || 1;
+      fetch('https://api.github.com/repos/'+REPO+'/actions/workflows/'+encodeURIComponent('vi-snapshots.yml')+'/runs?event=workflow_dispatch&per_page=20',
+        { headers:{ 'Authorization':'Bearer '+tok, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' } })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          var runs = (j && j.workflow_runs) || [];
+          var run = runs.filter(function(rn){
+            return Date.parse(rn.created_at || rn.run_started_at || 0) >= (t0 - 12000);
+          }).sort(function(a,b){ return Date.parse(b.created_at) - Date.parse(a.created_at); })[0];
+          if(!run){ if(attempt < 4){ setTimeout(function(){ captureSnapshotRun(t0, attempt+1); }, 2500); } return; }
+          var o = qLoad(); var changed = false;
+          Object.keys(o).forEach(function(key){
+            if(key.indexOf('snapshots|') !== 0) return;
+            var e = o[key]; if(!e || (e.runs||[]).length) return;
+            e.runs = [{ wf:'vi-snapshots.yml', plat:'all', id:run.id, url:run.html_url, status:run.status }];
+            changed = true;
+          });
+          if(changed) qSave(o);
+        }).catch(function(){});
+    }
+    function qSync(){
+      // Reconcile the optimistic "Queued" overlays against the REAL run status on
+      // GitHub so a cell never silently reverts to its run glyph: a run still
+      // queued/running keeps its badge alive (so a long backfill held behind
+      // GitHub's concurrency cap does not hit the 20-min TTL and vanish), a run
+      // that FAILED becomes a sticky "Failed" badge (an early failure may never
+      // post a commit status for the server to render), and a finished run is left
+      // for the server result to take over.
+      var tok = getTok(); if(!tok) return;
+      var o = qLoad();
+      var live = Object.keys(o).filter(function(k){ return o[k] && !o[k].failed; });
+      if(!live.length) return;
+      var snapTs = 0, snapNeedsId = false;
+      live.forEach(function(k){
+        if(k.indexOf('snapshots|')===0){ var ts=o[k].ts||0; if(!snapTs||ts<snapTs) snapTs=ts; if(!((o[k].runs||[]).length)) snapNeedsId=true; }
+      });
+      if(snapNeedsId) captureSnapshotRun(snapTs);
+      live.forEach(function(k){
+        var c = k.slice(0, k.indexOf('|')); var sha = k.slice(k.indexOf('|')+1);
+        if(c!=='snapshots' && !((o[k].runs||[]).length)) captureRuns(c, sha);
+      });
+      fetch('https://api.github.com/repos/'+REPO+'/actions/runs?per_page=100',
+        { headers:{ 'Authorization':'Bearer '+tok, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' } })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if(!j || !j.workflow_runs) return;
+          var byId = {}; j.workflow_runs.forEach(function(run){ byId[run.id] = run; });
+          var o2 = qLoad(); var changed = false; var now = Date.now();
+          var FAIL = ['failure','timed_out','startup_failure','cancelled'];
+          var ACTIVE = ['queued','in_progress','requested','waiting','pending','action_required'];
+          Object.keys(o2).forEach(function(key){
+            var e = o2[key]; if(!e || e.failed) return;
+            var ids = (e.runs||[]).map(function(r){ return r.id; }).filter(Boolean);
+            if(!ids.length) return;
+            var anyActive = false, anyFail = false, allKnown = true, failUrl = '';
+            ids.forEach(function(id){
+              var run = byId[id]; if(!run){ allKnown = false; return; }
+              if(ACTIVE.indexOf(run.status) >= 0) anyActive = true;
+              else if(run.status === 'completed' && FAIL.indexOf(run.conclusion) >= 0){ anyFail = true; failUrl = failUrl || run.html_url || ''; }
+            });
+            if(anyActive){ e.activeAt = now; changed = true; }
+            else if(anyFail && allKnown){ e.failed = { url: failUrl }; changed = true; }
+          });
+          if(changed){ qSave(o2); applyQueued(); }
+        }).catch(function(){});
+    }
     function applyQueued(){
-      // Re-apply remembered queued badges after each (auto-)reload. An entry is
-      // dropped once the server renders a real status for that cell (its run glyph
-      // is gone) or once it ages out — so the overlay is a short, self-clearing
-      // bridge, never a permanent fake.
+      // Re-apply remembered queued badges after each (auto-)reload. A confirmed
+      // failure stays a sticky "Failed" badge; an entry whose run is still active
+      // is kept alive by qSync (e.activeAt); otherwise it is dropped once the
+      // server renders a real status or it ages out of the optimistic window.
       var o = qLoad(); var now = Date.now(); var changed = false; var live = 0;
       Object.keys(o).forEach(function(key){
         var e = o[key]; var i = key.indexOf('|'); var c = key.slice(0,i); var sha = key.slice(i+1);
-        if(!e || (now - (e.ts||0)) > QTTL){ delete o[key]; changed = true; return; }
+        if(!e){ delete o[key]; changed = true; return; }
         var painted = document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
         var a = document.querySelector('a.cidash-run[data-cap="'+c+'"][data-sha="'+sha+'"]');
+        var rc = document.querySelector('td.cidash-cap-cell[data-cap="'+c+'"][data-sha="'+sha+'"]');
+        if(e.failed){
+          if(rc){
+            var frts = Date.parse(rc.getAttribute('data-ts')||'') || 0;
+            if(frts && frts > (e.ts||0)){ delete o[key]; changed = true; return; }
+          }
+          var ftd = painted || (a ? a.closest('td') : null) || rc;
+          if(ftd){ if(rc && !e.orig){ e.orig = rc.innerHTML; changed = true; } qPaintFailed(ftd, c, sha); }
+          return;
+        }
+        var alive = (now - (e.ts||0)) <= QTTL || (e.activeAt && (now - e.activeAt) <= QTTL);
+        if(!alive){ delete o[key]; changed = true; return; }
         if(painted){ live++; }
         else if(a){ qPaint(a.closest('td'), c, sha); live++; }
-        else {
-          // The cell may already hold a RESULT (re-run from the report, not an
-          // empty cell). Overlay "Queued" on it until a NEWER result lands. A
-          // server-side running spinner has no data-cap, so it falls through to
-          // the delete branch below (the server has taken over).
-          var rc = document.querySelector('td.cidash-cap-cell[data-cap="'+c+'"][data-sha="'+sha+'"]');
-          if(rc){
-            var rts = Date.parse(rc.getAttribute('data-ts')||'') || 0;
-            if(rts && rts > (e.ts||0)){ delete o[key]; changed = true; }   // re-run finished
-            else { if(!e.orig){ e.orig = rc.innerHTML; changed = true; } qPaint(rc, c, sha); live++; }
-          }
-          else { delete o[key]; changed = true; }   // real status / spinner took over
+        else if(rc){
+          var rts = Date.parse(rc.getAttribute('data-ts')||'') || 0;
+          if(rts && rts > (e.ts||0)){ delete o[key]; changed = true; }
+          else { if(!e.orig){ e.orig = rc.innerHTML; changed = true; } qPaint(rc, c, sha); live++; }
         }
+        else { delete o[key]; changed = true; }
       });
       if(changed) qSave(o);
       if(live > 0) qArmReload();
@@ -1214,27 +1305,31 @@ run_dialog = (r"""
       var c = qState.cap, sha = qState.sha; if(!c) return;
       var o = qLoad(); var entry = o[c+'|'+sha]; var def = RT[c];
       if(!entry || !def){ cidashQClose(); return; }
+      var failed = !!entry.failed;
       var plats = (entry.plats||[]).map(cap).join(', ');
       var short = entry.short || sha.slice(0,7);
       var live = qLiveEntries(o); var pos = 0;
       live.forEach(function(en, idx){ if(en.key===c+'|'+sha) pos = idx+1; });
       var h = '';
-      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em"><strong>'+esc(def.label)+'</strong> for commit <code style="font-family:monospace">'+esc(short)+'</code>'+(plats?' \u00b7 '+esc(plats):'')+'.</p>';
-      if(live.length>1 && pos){ h += '<p style="margin:0 0 12px;font-size:.85em">Place in queue: <strong>#'+pos+'</strong> <span style="color:var(--fg-muted)">of '+live.length+' queued from this browser (oldest first).</span></p>'; }
+      h += '<p style="margin:0 0 12px;color:var(--fg-muted);font-size:.85em"><strong>'+esc(def.label)+'</strong> for commit <code style="font-family:monospace">'+esc(short)+'</code>'+(plats?' \u00b7 '+esc(plats):'')+(failed?' \u2014 <span style="color:#f85149">this run failed</span>.':'.')+'</p>';
+      if(!failed && live.length>1 && pos){ h += '<p style="margin:0 0 12px;font-size:.85em">Place in queue: <strong>#'+pos+'</strong> <span style="color:var(--fg-muted)">of '+live.length+' queued from this browser (oldest first).</span></p>'; }
       h += '<div id="cidash-q-status" style="font-size:.82em;min-height:1.2em;margin:0 0 12px"></div>';
       h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
       h += qViewLinks(c, entry);
-      h += '<button class="cidash-btn cidash-danger" id="cidash-q-cancel">\u2715 Cancel run</button>';
+      if(failed){ h += '<button class="cidash-btn cidash-ghost" id="cidash-q-dismiss">Dismiss</button>'; }
+      else { h += '<button class="cidash-btn cidash-danger" id="cidash-q-cancel">\u2715 Cancel run</button>'; }
       h += '</div>';
-      h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0"><strong>Cancel run</strong> stops it on GitHub Actions (uses the same token you queued it with). <strong>View</strong> opens it on GitHub, where you can watch it or stop it manually.</p>';
+      if(failed){ h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0"><strong>View</strong> opens the failed run on GitHub to see what went wrong. <strong>Dismiss</strong> clears this badge so you can run it again from the dashboard.</p>'; }
+      else { h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0"><strong>Cancel run</strong> stops it on GitHub Actions (uses the same token you queued it with). <strong>View</strong> opens it on GitHub, where you can watch it or stop it manually.</p>'; }
       $("cidash-q-body").innerHTML = h;
       var cb=$("cidash-q-cancel"); if(cb) cb.addEventListener('click', function(){ cancelQueued(c, sha); });
+      var db=$("cidash-q-dismiss"); if(db) db.addEventListener('click', function(){ qForget(c, sha); cidashQClose(); });
     }
     function openQ(c, sha){
       if(!RT[c]) return;
       qState = { cap:c, sha:sha };
       var entry = qLoad()[c+'|'+sha];
-      $("cidash-q-title").textContent = "Queued: " + RT[c].label;
+      $("cidash-q-title").textContent = (entry && entry.failed ? "Failed: " : "Queued: ") + RT[c].label;
       renderQ();
       $("cidash-q-modal").style.display='block';
       document.body.style.overflow='hidden';
@@ -1372,7 +1467,7 @@ run_dialog = (r"""
         chain=chain.then(function(){
           return dispatchOne('vi-snapshots.yml', { mode:'backfill' }).then(function(r){
             done++;
-            if(r.ok){ ok++; snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); }
+            if(r.ok){ ok++; snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); captureSnapshotRun(t0); }
             else { err++; if(r.status===401) clearTok(); }
             statusFn('Queuing\u2026 '+done+'/'+total, null);
           });
@@ -1612,8 +1707,8 @@ run_dialog = (r"""
     // Re-apply optimistic "Queued" badges once the table exists (this script runs
     // before the table is parsed), and after every auto-refresh thereafter; wire
     // the backfill card the same way.
-    if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); bfInit(); }); }
-    else { applyQueued(); bfInit(); }
+    if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); qSync(); bfInit(); }); }
+    else { applyQueued(); qSync(); bfInit(); }
   })();
   </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__HIST__', hist_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
 
@@ -1725,6 +1820,9 @@ html = f"""<!DOCTYPE html>
     /* Optimistic "just queued from this browser" cue: a dashed ring distinguishes
        a client-side queued badge from a server-confirmed running one. */
     .run-badge.cidash-queued{{outline:1px dashed rgba(255,255,255,.6);outline-offset:1px}}
+    /* A run confirmed FAILED on GitHub: a sticky red badge (no spinner, no dashed
+       "optimistic" ring) so an error shows instead of the cell silently reverting. */
+    .run-badge.cidash-failed{{background:#da3633;outline:none}}
     .run-spin{{width:9px;height:9px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;display:inline-block;animation:cidash-spin .7s linear infinite}}
     @keyframes cidash-spin{{to{{transform:rotate(360deg)}}}}
     {run_dialog_css}
