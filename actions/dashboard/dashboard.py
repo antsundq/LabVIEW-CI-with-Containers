@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, re, sys, urllib.request, urllib.error
+import html, json, os, re, sys, urllib.request, urllib.error
 from urllib.parse import quote
 
 token    = os.environ['GH_TOKEN']
@@ -279,6 +279,13 @@ running_flag = {'on': False}
 any_output = {'on': False}
 run_count  = {'n': 0}
 
+# Project revisions (newest first), fed to the "Populate history" dialog's
+# "start from" picker. Only project revisions carry run glyphs (badge() returns
+# EMPTY_CELL for non-project commits), so these are exactly the revisions the
+# dialog can queue activities for. json.dumps escapes the messages safely for the
+# JS string context; the dialog renders them via textContent (no HTML injection).
+hist_revs = []
+
 rows_html = []
 for c in commits_data:
     sha     = c['sha']
@@ -311,6 +318,8 @@ for c in commits_data:
             'date': date,
             'vis': vi_tree(sha),
         })
+        # Newest-first list of revisions the history dialog can populate.
+        hist_revs.append({'sha': sha, 'short': short, 'msg': msg})
 
     # Fetch commit statuses
     statuses_data = gh_get(f'commits/{sha}/statuses') or []
@@ -508,8 +517,8 @@ for c in commits_data:
       <td style="padding:8px;font-family:monospace;font-size:.85em">
         <a href="{pages_url}/vi-snapshots/index.html?sha={sha}" style="color:var(--link)" title="Browse this commit's VIs in the VI Browser">{short}</a>
       </td>
-      <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{msg}"><a href="{pages_url}/vi-snapshots/index.html?sha={sha}" style="color:var(--fg)">{msg}</a></td>
-      <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">{author}</td>
+      <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{html.escape(msg)}"><a href="{pages_url}/vi-snapshots/index.html?sha={sha}" style="color:var(--fg)">{html.escape(msg)}</a></td>
+      <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">{html.escape(author)}</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">{date[:10]}</td>
       {mc_badge}
       {via_badge}
@@ -520,6 +529,7 @@ for c in commits_data:
     </tr>""")
 
 rows = '\n'.join(rows_html)
+hist_json = _json.dumps(hist_revs)
 now  = __import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
 
 # The "Include CI-only revisions" toggle is de-selected by default, so the
@@ -731,6 +741,24 @@ run_dialog_css = (
     '.lvci-bf-tok{margin-top:12px;border-top:1px solid var(--border);padding-top:12px;font-size:.84em;color:var(--fg-muted)}'
     '.lvci-bf-status{font-size:.82em;margin-top:10px}'
     '.lvci-bf-status:empty{display:none}'
+    # "Populate history" dialog — form controls (start-from picker, activity
+    # checkboxes, diff-based toggle). Reuses the run-modal chrome + cidash-btn.
+    '.cidash-hist-sec{margin:0 0 16px}'
+    '.cidash-hist-lbl{display:block;font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-muted);margin:0 0 7px}'
+    '#cidash-hist-start{width:100%;padding:8px 10px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:.9em;font-family:inherit}'
+    '.cidash-hist-acts{display:flex;flex-direction:column;gap:7px}'
+    '.cidash-hist-act{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--border);border-radius:7px;background:var(--bg);cursor:pointer;font-size:.88em;user-select:none}'
+    '.cidash-hist-act:hover{border-color:var(--link)}'
+    '.cidash-hist-act input{accent-color:var(--link);width:15px;height:15px;margin:0;flex:0 0 auto}'
+    '.cidash-hist-act .cidash-hist-actsub{color:var(--fg-muted);font-size:.85em;margin-left:auto;text-align:right}'
+    '.cidash-hist-act.disabled{opacity:.45;cursor:default}'
+    '.cidash-hist-act.disabled:hover{border-color:var(--border)}'
+    '.cidash-hist-toggle{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid var(--border);border-left:3px solid #1f6feb;border-radius:8px;background:var(--surface);cursor:pointer;font-size:.88em;user-select:none}'
+    '.cidash-hist-toggle input{accent-color:var(--link);width:15px;height:15px;margin:2px 0 0;flex:0 0 auto}'
+    '.cidash-hist-toggle .cidash-hist-tmain{font-weight:600}'
+    '.cidash-hist-toggle .cidash-hist-tsub{color:var(--fg-muted);font-size:.9em;margin-top:2px;font-weight:400}'
+    '.cidash-hist-summary{font-size:.84em;color:var(--fg-muted);margin:0 0 12px}'
+    '.cidash-hist-summary b{color:var(--fg)}'
 )
 # Modal + controller. Clicking a cell's play glyph opens this; clicking "Run now"
 # DISPATCHES the workflow(s) straight to GitHub Actions via the REST API
@@ -757,6 +785,15 @@ run_dialog = (r"""
         <button onclick="cidashQClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
       </div>
       <div id="cidash-q-body" style="padding:16px"></div>
+    </div>
+  </div>
+  <div id="cidash-hist-modal" onclick="if(event.target===this)cidashHistClose()" style="display:none;position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.55)">
+    <div role="dialog" aria-modal="true" aria-labelledby="cidash-hist-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(600px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <strong id="cidash-hist-title" style="font-size:.95em">Populate dashboard history</strong>
+        <button onclick="cidashHistClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
+      </div>
+      <div id="cidash-hist-body" style="padding:16px"></div>
     </div>
   </div>
   <script>
@@ -1283,13 +1320,13 @@ run_dialog = (r"""
     }
     function bfFill(t, sha, parent){ return String(t).replace(/\{sha\}/g, sha).replace(/\{parent\}/g, parent||''); }
     function bfInputs(p, sha, parent){ var o={}; Object.keys(p.inputs).forEach(function(k){ o[k]=bfFill(p.inputs[k], sha, parent); }); return o; }
-    function bfRunAll(){
-      var cells=bfCells();
-      if(!cells.length){ bfStatus('Nothing left to run \u2014 every revision is queued or already has results.', 'ok'); return; }
-      if(!getTok()){ bfTokPanel(true); bfStatus('Add a token (Actions: Read and write) to queue runs.', 'warn'); var i=document.getElementById('lvci-bf-tok-input'); if(i) i.focus(); return; }
-      bfTokPanel(false);
-      var runBtn=document.getElementById('lvci-bf-run'); var disBtn=document.getElementById('lvci-bf-dismiss');
-      if(runBtn) runBtn.disabled=true; if(disBtn) disBtn.disabled=true;
+    // Shared dispatch engine for BOTH the fresh-install backfill card and the
+    // Populate-history dialog: queue a set of empty run-cells, snapshots as ONE
+    // backfill run (the workflow walks the whole history oldest->newest and dedupes)
+    // and the per-revision activities oldest-first, gently throttled so a long
+    // history doesn't trip GitHub's secondary rate limits. Resolves with an
+    // {ok, err, total} tally; the caller owns its own status line + buttons.
+    function dispatchCells(cells, statusFn){
       var perRev=[]; var snapShas=[]; var sawSnap=false;
       cells.forEach(function(x){
         if(x.cap==='snapshots'){ sawSnap=true; snapShas.push(x.sha); }
@@ -1298,7 +1335,7 @@ run_dialog = (r"""
       perRev.sort(function(a,b){ return b.order - a.order; });   // oldest first
       var total=perRev.length + (sawSnap?1:0);
       var t0=Date.now(); var ok=0, err=0, done=0;
-      bfStatus('Queuing '+total+' workflow'+(total>1?'s':'')+'\u2026', null);
+      statusFn('Queuing '+total+' workflow'+(total>1?'s':'')+'\u2026', null);
       var chain=Promise.resolve();
       // 1) Snapshots — one backfill run for the whole history (oldest→newest, deduped).
       if(sawSnap){
@@ -1307,12 +1344,11 @@ run_dialog = (r"""
             done++;
             if(r.ok){ ok++; snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); }
             else { err++; if(r.status===401) clearTok(); }
-            bfStatus('Queuing\u2026 '+done+'/'+total, null);
+            statusFn('Queuing\u2026 '+done+'/'+total, null);
           });
         });
       }
-      // 2) Per-revision capabilities, oldest first, gently throttled so a long
-      //    history doesn't trip GitHub's secondary rate limits.
+      // 2) Per-revision capabilities, oldest first, gently throttled.
       perRev.forEach(function(x){
         chain=chain.then(function(){
           var def=RT[x.cap]; if(!def){ return; }
@@ -1324,17 +1360,26 @@ run_dialog = (r"""
             var okPlats=results.filter(function(r){return r.ok;}).map(function(r){return r.plat;});
             if(okPlats.length){ ok++; markQueued(x.cap, x.sha, okPlats, x.parent, Date.now()); captureRuns(x.cap, x.sha); }
             else { err++; }
-            bfStatus('Queuing\u2026 '+done+'/'+total, null);
+            statusFn('Queuing\u2026 '+done+'/'+total, null);
           }).then(function(){ return new Promise(function(res){ setTimeout(res, 650); }); });
         });
       });
-      chain.then(function(){
+      return chain.then(function(){ return { ok:ok, err:err, total:total }; });
+    }
+    function bfRunAll(){
+      var cells=bfCells();
+      if(!cells.length){ bfStatus('Nothing left to run \u2014 every revision is queued or already has results.', 'ok'); return; }
+      if(!getTok()){ bfTokPanel(true); bfStatus('Add a token (Actions: Read and write) to queue runs.', 'warn'); var i=document.getElementById('lvci-bf-tok-input'); if(i) i.focus(); return; }
+      bfTokPanel(false);
+      var runBtn=document.getElementById('lvci-bf-run'); var disBtn=document.getElementById('lvci-bf-dismiss');
+      if(runBtn) runBtn.disabled=true; if(disBtn) disBtn.disabled=true;
+      dispatchCells(cells, bfStatus).then(function(res){
         if(runBtn) runBtn.disabled=false; if(disBtn) disBtn.disabled=false;
-        if(ok && !err){
-          bfStatus('\u2713 Queued '+ok+' workflow'+(ok>1?'s':'')+', oldest first \u2014 results appear as they finish. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'ok');
+        if(res.ok && !res.err){
+          bfStatus('\u2713 Queued '+res.ok+' workflow'+(res.ok>1?'s':'')+', oldest first \u2014 results appear as they finish. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'ok');
           bfDismiss();
-        } else if(ok && err){
-          bfStatus('Queued '+ok+', but '+err+' could not be dispatched \u2014 check the token has <strong>Actions: Read and write</strong> on this repo. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'warn');
+        } else if(res.ok && res.err){
+          bfStatus('Queued '+res.ok+', but '+res.err+' could not be dispatched \u2014 check the token has <strong>Actions: Read and write</strong> on this repo. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'warn');
         } else {
           bfStatus('Could not queue runs. The token needs <strong>Actions: Read and write</strong> on <code>'+esc(REPO)+'</code> (runs dispatch on <code>'+esc(BRANCH)+'</code>). <a href="'+tokenSetupUrl()+'" target="_blank" rel="noopener" style="color:var(--link)">Create or update a token \u2197</a>', 'err');
           bfTokPanel(true);
@@ -1348,15 +1393,161 @@ run_dialog = (r"""
       var save=document.getElementById('lvci-bf-tok-save'); if(save) save.addEventListener('click', function(){ var i=document.getElementById('lvci-bf-tok-input'); var v=(i&&i.value||'').trim(); if(!v){ if(i) i.focus(); return; } setTok(v); bfRunAll(); });
       var inp=document.getElementById('lvci-bf-tok-input'); if(inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); var v=(inp.value||'').trim(); if(v){ setTok(v); bfRunAll(); } } });
       var link=document.getElementById('lvci-bf-tok-link'); if(link) link.href=tokenSetupUrl();
+      var cust=document.getElementById('lvci-bf-custom'); if(cust) cust.addEventListener('click', function(e){ e.preventDefault(); histOpen(); });
       bfShow();
     }
+    // ── "Populate dashboard history" dialog ──────────────────────────────
+    // Opened from the header's More menu (window.lvciRunHistory) and the fresh
+    // install card's "Customize…" link. The user chooses where in history to
+    // start, whether to run the lean diff-based pass (VI Snapshots + VIDiff only —
+    // the modified-file visual history) or every activity, and exactly which
+    // activities to queue. Reuses dispatchCells (oldest-first, snapshots as one
+    // backfill) + the same token and optimistic-queued bridge as every other
+    // dispatch on the dashboard.
+    var HIST = __HIST__;                        // [{sha, short, msg}] newest-first (project revisions)
+    var HIST_CAPS = [                           // activity rows, in display order
+      ['snapshots',   'VI Snapshots', 'Renders every changed VI (one backfill pass)'],
+      ['vidiff',      'VIDiff',       'Visual diff of the VIs each revision changed'],
+      ['masscompile', 'Mass Compile', 'Compiles the whole project, each revision'],
+      ['vi-analyzer', 'VI Analyzer',  'Runs the VI Analyzer suite, each revision']
+    ];
+    var DIFF_CAPS = { snapshots:1, vidiff:1 };  // the lean "diff-based" subset
+    function histModal(){ return document.getElementById('cidash-hist-modal'); }
+    function cidashHistClose(){ var m=histModal(); if(m) m.style.display='none'; document.body.style.overflow=''; }
+    function histStatus(html, kind){
+      var s=document.getElementById('cidash-hist-status'); if(!s) return;
+      var col = kind==='ok' ? '#3fb950' : (kind==='err' ? '#f85149' : (kind==='warn' ? '#d29922' : 'var(--fg-muted)'));
+      s.style.color=col; s.innerHTML=html||'';
+    }
+    function histTokPanel(show){ var p=document.getElementById('cidash-hist-tok'); if(p) p.style.display = show ? 'block' : 'none'; }
+    function histSelectedCaps(){
+      var caps={};
+      HIST_CAPS.forEach(function(o){ var b=document.getElementById('cidash-hist-act-'+o[0]); if(b && b.checked && !b.disabled) caps[o[0]]=1; });
+      return caps;
+    }
+    function histIncludedShas(){
+      // "Start from" picks an (older) revision; include it and everything NEWER.
+      // HIST is newest-first, so that is indices 0..iStart. '' = the oldest = all.
+      var sel=document.getElementById('cidash-hist-start');
+      var startSha = sel ? sel.value : '';
+      var iStart = HIST.length-1;
+      if(startSha){ for(var i=0;i<HIST.length;i++){ if(HIST[i].sha===startSha){ iStart=i; break; } } }
+      var inc={}; for(var j=0;j<=iStart && j<HIST.length;j++){ inc[HIST[j].sha]=1; }
+      return inc;
+    }
+    function histCells(){
+      var caps=histSelectedCaps(); var inc=histIncludedShas();
+      return bfCells().filter(function(x){ return caps[x.cap] && inc[x.sha] && !(x.cap==='vidiff' && !x.parent); });
+    }
+    function histRefresh(){
+      // Live summary of what will be queued from the current selection.
+      var cells=histCells();
+      var shas={}; var snaps=0; var perRev=0;
+      cells.forEach(function(x){ shas[x.sha]=1; if(x.cap==='snapshots') snaps=1; else perRev++; });
+      var runs=perRev + snaps;   // snapshots collapse into one backfill run
+      var nrev=Object.keys(shas).length;
+      var sum=document.getElementById('cidash-hist-summary');
+      if(sum){
+        if(!HIST.length){ sum.innerHTML='No project revisions to populate yet \u2014 commit some VIs first.'; }
+        else if(!runs){ sum.innerHTML='Nothing to queue \u2014 the selected revisions already have results for those activities.'; }
+        else { sum.innerHTML='Will queue <b>'+runs+'</b> run'+(runs>1?'s':'')+' across <b>'+nrev+'</b> revision'+(nrev>1?'s':'')+', oldest first.'; }
+      }
+      var go=document.getElementById('cidash-hist-go'); if(go) go.disabled = !runs;
+    }
+    function histDiffApply(){
+      // The diff-based toggle constrains the run to Snapshots + VIDiff: when it is
+      // ON, Mass Compile + VI Analyzer are unchecked and greyed out; turning it OFF
+      // re-checks + re-enables them (its label promises "uncheck to also run" them).
+      // Only invoked from the toggle itself, so manually unchecking an activity
+      // afterwards is never overridden by a summary refresh.
+      var diff=document.getElementById('cidash-hist-diff');
+      var on = !!(diff && diff.checked);
+      HIST_CAPS.forEach(function(o){
+        if(DIFF_CAPS[o[0]]) return;
+        var b=document.getElementById('cidash-hist-act-'+o[0]);
+        var row=document.getElementById('cidash-hist-actrow-'+o[0]);
+        if(b){ b.disabled=on; b.checked=!on; }
+        if(row) row.classList.toggle('disabled', on);
+      });
+    }
+    function histRender(){
+      var body=document.getElementById('cidash-hist-body'); if(!body) return;
+      var h='';
+      h += '<p style="margin:0 0 16px;color:var(--fg-muted);font-size:.86em;line-height:1.55">Queue CI for revisions that already exist so the dashboard fills in. Runs <strong>oldest \u2192 newest</strong>; only activities that haven\u2019t run yet are queued, and VI Snapshots backfills the whole history in one incremental pass.</p>';
+      h += '<div class="cidash-hist-sec"><label class="cidash-hist-lbl" for="cidash-hist-start">Start from</label>';
+      h += '<select id="cidash-hist-start"><option value="">Beginning \u2014 all '+HIST.length+' revision'+(HIST.length===1?'':'s')+'</option>';
+      HIST.forEach(function(r){ var lab=(r.short||'')+(r.msg?(' \u2014 '+r.msg):''); h += '<option value="'+esc(r.sha)+'">'+esc(lab)+'</option>'; });
+      h += '</select></div>';
+      h += '<div class="cidash-hist-sec"><label class="cidash-hist-toggle"><input type="checkbox" id="cidash-hist-diff" checked>'
+        + '<span><span class="cidash-hist-tmain">Diff-based \u2014 modified files only</span>'
+        + '<span class="cidash-hist-tsub">Runs just VI Snapshots and VIDiff (the visual history of what each revision changed). Uncheck to also run Mass Compile and VI Analyzer on every revision.</span></span></label></div>';
+      h += '<div class="cidash-hist-sec"><label class="cidash-hist-lbl">Activities</label><div class="cidash-hist-acts">';
+      HIST_CAPS.forEach(function(o){
+        h += '<label class="cidash-hist-act" id="cidash-hist-actrow-'+o[0]+'"><input type="checkbox" id="cidash-hist-act-'+o[0]+'" data-cap="'+o[0]+'" checked>'
+          + '<span>'+esc(o[1])+'</span><span class="cidash-hist-actsub">'+esc(o[2])+'</span></label>';
+      });
+      h += '</div></div>';
+      h += '<div id="cidash-hist-tok" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin:0 0 12px">';
+      h += '<div style="font-size:.82em;color:var(--fg);font-weight:600;margin-bottom:6px">One-time setup \u2014 a token to queue runs</div>';
+      h += '<ol style="font-size:.8em;color:var(--fg-muted);margin:0 0 8px;padding-left:18px;line-height:1.6">';
+      h += '<li><a href="'+tokenSetupUrl()+'" target="_blank" rel="noopener" style="color:var(--link)">Create a fine-grained token \u2197</a> \u2014 opens with the name, owner, and <strong>Actions: Read and write</strong> already set.</li>';
+      h += '<li><strong>Repository access</strong> \u2192 Only select repositories \u2192 add <code>'+esc(REPO)+'</code>.</li>';
+      h += '<li><strong>Permissions \u2192 Repository permissions \u2192 Actions \u2192 Read and write</strong>.</li>';
+      h += '<li>Generate, then paste it below.</li></ol>';
+      h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="cidash-hist-tok-input" type="password" autocomplete="off" placeholder="github_pat_\u2026 or ghp_\u2026" style="flex:1 1 240px;min-width:180px;padding:7px 10px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:.8em">';
+      h += '<button class="cidash-btn cidash-go" id="cidash-hist-tok-save">Save &amp; queue</button></div></div>';
+      h += '<div id="cidash-hist-summary" class="cidash-hist-summary"></div>';
+      h += '<div id="cidash-hist-status" style="font-size:.82em;min-height:1.2em;margin:0 0 12px"></div>';
+      h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
+      h += '<button class="cidash-btn cidash-go" id="cidash-hist-go">\u25B6 Queue runs</button>';
+      h += '<button class="cidash-btn cidash-ghost" id="cidash-hist-cancel">Cancel</button></div>';
+      body.innerHTML=h;
+      var diff=document.getElementById('cidash-hist-diff'); if(diff) diff.addEventListener('change', function(){ histDiffApply(); histRefresh(); });
+      var start=document.getElementById('cidash-hist-start'); if(start) start.addEventListener('change', histRefresh);
+      HIST_CAPS.forEach(function(o){ var b=document.getElementById('cidash-hist-act-'+o[0]); if(b) b.addEventListener('change', histRefresh); });
+      var go=document.getElementById('cidash-hist-go'); if(go) go.addEventListener('click', histRun);
+      var cancel=document.getElementById('cidash-hist-cancel'); if(cancel) cancel.addEventListener('click', cidashHistClose);
+      var save=document.getElementById('cidash-hist-tok-save'); if(save) save.addEventListener('click', function(){ var i=document.getElementById('cidash-hist-tok-input'); var v=(i&&i.value||'').trim(); if(!v){ if(i) i.focus(); return; } setTok(v); histTokPanel(false); histRun(); });
+      var tin=document.getElementById('cidash-hist-tok-input'); if(tin) tin.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); var v=(tin.value||'').trim(); if(v){ setTok(v); histTokPanel(false); histRun(); } } });
+      histDiffApply(); histRefresh();
+    }
+    function histOpen(){
+      var m=histModal(); if(!m) return;
+      histRender();
+      m.style.display='block'; document.body.style.overflow='hidden';
+    }
+    function histRun(){
+      var cells=histCells();
+      if(!cells.length){ histStatus('Nothing to queue \u2014 the selected revisions already have results for those activities.', 'warn'); return; }
+      if(!getTok()){ histTokPanel(true); histStatus('Add a token (Actions: Read and write) to queue runs.', 'warn'); var i=document.getElementById('cidash-hist-tok-input'); if(i) i.focus(); return; }
+      histTokPanel(false);
+      var go=document.getElementById('cidash-hist-go'); var cancel=document.getElementById('cidash-hist-cancel');
+      if(go) go.disabled=true; if(cancel) cancel.disabled=true;
+      dispatchCells(cells, histStatus).then(function(res){
+        if(cancel) cancel.disabled=false;
+        if(res.ok && !res.err){
+          histStatus('\u2713 Queued '+res.ok+' run'+(res.ok>1?'s':'')+', oldest first \u2014 results appear on the dashboard as they finish. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'ok');
+          bfDismiss();   // the fresh-install nudge has served its purpose
+        } else if(res.ok && res.err){
+          if(go) go.disabled=false;
+          histStatus('Queued '+res.ok+', but '+res.err+' could not be dispatched \u2014 check the token has <strong>Actions: Read and write</strong> on this repo. <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View runs \u2197</a>', 'warn');
+        } else {
+          if(go) go.disabled=false;
+          histStatus('Could not queue runs. The token needs <strong>Actions: Read and write</strong> on <code>'+esc(REPO)+'</code> (runs dispatch on <code>'+esc(BRANCH)+'</code>). <a href="'+tokenSetupUrl()+'" target="_blank" rel="noopener" style="color:var(--link)">Create or update a token \u2197</a>', 'err');
+          histTokPanel(true);
+        }
+      });
+    }
+    // Exposed for the shared header's "Populate history" menu item.
+    window.lvciRunHistory = histOpen;
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ var m=histModal(); if(m && m.style.display==='block') cidashHistClose(); } });
     // Re-apply optimistic "Queued" badges once the table exists (this script runs
     // before the table is parsed), and after every auto-refresh thereafter; wire
     // the backfill card the same way.
     if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); bfInit(); }); }
     else { applyQueued(); bfInit(); }
   })();
-  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
+  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__HIST__', hist_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
 
 # ── "Run CI for your whole history" card (fresh installs only) ───────────────
 # A brand-new dashboard has no results, so every project cell shows a one-click
@@ -1374,8 +1565,8 @@ if not any_output['on'] and not running_flag['on'] and run_count['n'] > 0:
         '<div class="lvci-bf-main">'
         '<div class="lvci-bf-icon" aria-hidden="true">&#9889;</div>'
         '<div class="lvci-bf-text">'
-        '<strong>Run CI for your existing revisions?</strong>'
-        '<span>This dashboard has no results yet. Queue CI for all <b id="lvci-bf-count"></b> revisions in one click &mdash; processed <b>oldest&nbsp;&rarr;&nbsp;newest</b> so snapshots and diffs build on one another with no duplicated work.</span>'
+        '<strong>Populate the dashboard with your history</strong>'
+        '<span>This dashboard has no results yet. Queue CI for all <b id="lvci-bf-count"></b> revisions in one click &mdash; processed <b>oldest&nbsp;&rarr;&nbsp;newest</b> so snapshots and diffs build on one another with no duplicated work. <a href="#" id="lvci-bf-custom" style="color:var(--link)">Choose activities or where to start&hellip;</a></span>'
         '</div>'
         '<div class="lvci-bf-actions">'
         '<button type="button" id="lvci-bf-run" class="cidash-btn cidash-go">&#9654; Run all history</button>'
@@ -1547,6 +1738,9 @@ for _name, _dst in [
     ('lvci-header.js', 'ci-out/dashboard/lvci-header.js'),
     ('vi-browser.html', 'ci-out/dashboard/vi-snapshots/index.html'),
     ('vi-interactive.html', 'ci-out/dashboard/vi-snapshots/vi-interactive.html'),
+    # vi-render.js powers the in-place block-diagram renderer that vi-browser.html
+    # and vi-interactive.html load; stage it beside them so the in-place view works.
+    ('vi-render.js', 'ci-out/dashboard/vi-snapshots/vi-render.js'),
     ('report-viewer.html', 'ci-out/dashboard/report/index.html'),
     ('whats-new.html', 'ci-out/dashboard/whats-new.html'),
     ('configure.html', 'ci-out/dashboard/configure.html'),
