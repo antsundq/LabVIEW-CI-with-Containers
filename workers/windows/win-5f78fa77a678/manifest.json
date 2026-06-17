@@ -6,9 +6,9 @@
   "base_image": "nationalinstruments/labview:latest-windows",
   "base_digest": "nationalinstruments/labview@sha256:d44465ad15415150d36221017ce54ca3d9f15db2e1cbf3227fee3e0f7e97f13c",
   "image_ref": "ghcr.io/elijah286/labview-ci-with-containers-labview:win-5f78fa77a678",
-  "build_date": "2026-06-16T18:24:43Z",
-  "git_sha": "868d55f870e6fa2a83d3ea1f0baa5820612b0c29",
-  "run_url": "https://github.com/elijah286/LabVIEW-CI-with-Containers/actions/runs/27638171862",
+  "build_date": "2026-06-17T03:13:26Z",
+  "git_sha": "d321a275a13ff855cf5c7df87b12787ca9a4a2e6",
+  "run_url": "https://github.com/elijah286/LabVIEW-CI-with-Containers/actions/runs/27662785977",
   "vipc": [
     {
       "file": "ci-tooling.vipc",
