@@ -1,0 +1,91 @@
+name: toimages COM probe (diagnostic)
+
+# Diagnostic ONLY (workflow_dispatch). Confirms whether the vendored
+# toimages\Convert.vi can be driven via LabVIEW's ActiveX/COM server inside the
+# stock NI LabVIEW Windows container to emit the position-aware frames JSON that
+# powers VI Browser 2.0. Touches nothing in production: it renders a few example
+# VIs to JSON and prints the result to the log (and uploads it as an artifact).
+
+on:
+  workflow_dispatch:
+    inputs:
+      vis:
+        description: "Semicolon-separated example VI paths (relative to repo root)"
+        required: false
+        default: "example/main.vi;example/Curriculum Launcher.vi;example/Simple Solar Tracker v4.vi;example/Status String Update.vi"
+
+env:
+  LABVIEW_CONTAINER_IMAGE: nationalinstruments/labview:latest-windows
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure Docker daemon is running
+        shell: powershell
+        run: |
+          $svc = Get-Service docker -ErrorAction SilentlyContinue
+          if (-not $svc) { Write-Error 'Docker service not found on runner'; exit 1 }
+          if ($svc.Status -ne 'Running') { Start-Service docker; Start-Sleep -Seconds 5 }
+          docker version
+
+      - name: Run COM probe in the LabVIEW container
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $image = $Env:LABVIEW_CONTAINER_IMAGE
+          Write-Host "Pulling $image ..."
+          docker pull $image | Out-Null
+
+          $repo = "${{ github.workspace }}"
+          $name = "toimages-probe-$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
+
+          # Translate the dispatch input into the -TargetVI argument list.
+          $visInput = @'
+          ${{ github.event.inputs.vis }}
+          '@
+          $vis = ($visInput -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+          $targets = $vis | ForEach-Object { "C:\repo\" + ($_ -replace '/', '\') }
+          $targetArg = ($targets | ForEach-Object { "'$_'" }) -join ','
+
+          Write-Host "Starting container $name ..."
+          docker run -d --name $name -v "${repo}:C:\repo" $image `
+            powershell -NoProfile -Command "while (`$true) { Start-Sleep -Seconds 3600 }" | Out-Null
+          if ($LASTEXITCODE -ne 0) { Write-Error "container start failed"; exit 1 }
+
+          try {
+            $inner = "C:\repo\.github\labview\toimages-probe.ps1 " +
+                     "-ConvertVI 'C:\repo\.github\labview\toimages\Convert.vi' " +
+                     "-OutDir 'C:\repo\_probe-out' " +
+                     "-TargetVI @($targetArg)"
+            Write-Host "exec: $inner"
+            docker exec $name powershell -NoProfile -ExecutionPolicy Bypass -Command $inner
+            $code = $LASTEXITCODE
+            Write-Host "probe exit code: $code"
+
+            # Copy the JSON out of the container for inspection / artifact upload.
+            New-Item -ItemType Directory -Force -Path "$repo\_probe-out" | Out-Null
+            docker cp "${name}:C:\repo\_probe-out\." "$repo\_probe-out" 2>$null
+            Write-Host "=== probe outputs ==="
+            Get-ChildItem "$repo\_probe-out" -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Host ("  {0}  ({1} bytes)" -f $_.Name, $_.Length)
+            }
+          }
+          finally {
+            docker rm -f $name | Out-Null
+          }
+
+      - name: Upload probe JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toimages-probe-out
+          path: _probe-out/
+          if-no-files-found: ignore
