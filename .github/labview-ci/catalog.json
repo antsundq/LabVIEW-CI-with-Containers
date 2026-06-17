@@ -1,11 +1,23 @@
 {
   "schemaVersion": 1,
-  "version": "2.5.1",
+  "version": "2.6.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "2.6.0",
+        "date": "2026-06-17",
+        "title": "Configure when each activity runs, and a tidier Pipeline tab",
+        "summary": "The Configure dialog now spells out that its settings control what your CI does whenever a revision is submitted to the repository - a direct push to the default branch, a pull request from a branch in the repo, or a pull request from a fork. A new 'When activities run' table on the Pipeline tab lets you record, per activity, which of those sources should run it, with defaults that mirror how the pipeline already behaves (Mass Compile, VI Analyzer and VIDiff on pushes and pull requests; VI Snapshots only when a commit lands on the default branch). Fork pull requests are clearly flagged as running sandboxed by GitHub - read-only, with no access to your secrets. The long 'Max concurrent runners' explanation has also been tucked behind a click-to-open info (i) button so the form stays uncluttered.",
+        "highlights": [
+          "New 'When activities run' table on the Pipeline tab: choose which submission sources - push to the default branch, pull request from a branch, or pull request from a fork - run each activity.",
+          "The dialog now states up front that these settings govern what happens whenever a revision is submitted to the repository.",
+          "Per-activity defaults match the current pipeline, so nothing changes until you edit them; your choices are saved to the configuration and travel with the reconfigure pull request.",
+          "Fork pull requests are flagged as sandboxed (read-only, no secrets), and the verbose concurrency explanation now lives behind a compact info button."
+        ]
+      },
       {
         "version": "2.5.1",
         "date": "2026-06-17",
