@@ -345,6 +345,10 @@ running_flag = {'on': False}
 # has revisions left to run, so it never appears once CI output exists.
 any_output = {'on': False}
 run_count  = {'n': 0}
+# Caps (activities) that have at least one rendered result or active run anywhere
+# in history. The "Populate history" dialog uses this to offer an "only workers
+# that have never run" filter — a worker absent from this set is brand-new.
+caps_ran = set()
 
 # Project revisions (newest first), fed to the "Populate history" dialog's
 # "start from" picker. Only project revisions carry run glyphs (badge() returns
@@ -462,11 +466,13 @@ for c in commits_data:
             return EMPTY_CELL
         run = fresh_pending(*contexts)
         if run is not None:
+            if cap: caps_ran.add(cap)
             return running_cell(label, run.get('target_url', ''))
         s = pick_status(*contexts)
         if not s:
             return run_cell(cap) if cap else EMPTY_CELL
         any_output['on'] = True
+        if cap: caps_ran.add(cap)
         color  = {'success':'#2ea043','failure':'#da3633','pending':'#9a6700','error':'#da3633'}.get(s['state'],'#555')
         emoji  = {'success':'✅','failure':'❌','pending':'⏳','error':'⚠️'}.get(s['state'],'?')
         url    = url_override or s.get('target_url','')
@@ -499,9 +505,11 @@ for c in commits_data:
         _mc_run = fresh_pending('CI / Mass Compile')
         _mc = masscompile_summary(sha)
         if _mc_run is not None:
+            caps_ran.add('masscompile')
             mc_badge = running_cell('compile', _mc_run.get('target_url', ''))
         elif _mc and isinstance(_mc.get('percent'), int):
             any_output['on'] = True
+            caps_ran.add('masscompile')
             _pct = _mc['percent']
             _ok, _tot = _mc.get('ok', 0), _mc.get('total', 0)
             # Yellow whenever SOME VIs failed (a partial compile); red is reserved
@@ -544,11 +552,13 @@ for c in commits_data:
         _snap_run = fresh_pending('CI / VI Snapshots')
         _have, _total = snapshot_coverage(sha)
         if _snap_run is not None:
+            caps_ran.add('snapshots')
             snap_badge = running_cell('snapshots', _snap_run.get('target_url', ''))
         elif _have <= 0:
             snap_badge = run_cell('snapshots')
         else:
             any_output['on'] = True
+            caps_ran.add('snapshots')
             _href = f'{pages_url}/vi-snapshots/index.html?sha={sha}'
             if _have >= _total:
                 _bg, _txt = '#1f6feb', str(_total)
@@ -609,6 +619,7 @@ for c in commits_data:
 
 rows = '\n'.join(rows_html)
 hist_json = _json.dumps(hist_revs)
+caps_ran_json = _json.dumps({c: 1 for c in sorted(caps_ran)})
 now  = __import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
 
 # The "Include CI-only revisions" toggle is de-selected by default, so the
@@ -1659,7 +1670,7 @@ run_dialog = (r"""
     }
     function bfInit(){
       var c=bfCard(); if(!c) return;
-      var run=document.getElementById('lvci-bf-run'); if(run) run.addEventListener('click', bfRunAll);
+      var run=document.getElementById('lvci-bf-run'); if(run) run.addEventListener('click', function(){ histOpen(); });
       var dis=document.getElementById('lvci-bf-dismiss'); if(dis) dis.addEventListener('click', function(){ bfDismiss(); });
       var save=document.getElementById('lvci-bf-tok-save'); if(save) save.addEventListener('click', function(){ var i=document.getElementById('lvci-bf-tok-input'); var v=(i&&i.value||'').trim(); if(!v){ if(i) i.focus(); return; } setTok(v); bfRunAll(); });
       var inp=document.getElementById('lvci-bf-tok-input'); if(inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); var v=(inp.value||'').trim(); if(v){ setTok(v); bfRunAll(); } } });
@@ -1676,14 +1687,26 @@ run_dialog = (r"""
     // backfill) + the same token and optimistic-queued bridge as every other
     // dispatch on the dashboard.
     var HIST = __HIST__;                        // [{sha, short, msg}] newest-first (project revisions)
-    var HIST_CAPS = [                           // activity rows, in display order
-      ['snapshots',   'VI Snapshots', 'Renders every changed VI (one backfill pass)'],
-      ['vidiff',      'VIDiff',       'Visual diff of the VIs each revision changed'],
-      ['masscompile', 'Mass Compile', 'Compiles the whole project, each revision'],
-      ['vi-analyzer', 'VI Analyzer',  'Runs the VI Analyzer suite, each revision'],
-      ['antidoc',     'Antidoc',      'Generates project documentation, each revision']
-    ];
+    var RAN = __CAPS_RAN__;                     // {cap:1} caps with a result/active run somewhere in history
+    var CAP_META = {                            // label + sub for each known capability
+      'snapshots':   ['VI Snapshots', 'Renders every changed VI (one backfill pass)'],
+      'vidiff':      ['VIDiff',       'Visual diff of the VIs each revision changed'],
+      'masscompile': ['Mass Compile', 'Compiles the whole project, each revision'],
+      'vi-analyzer': ['VI Analyzer',  'Runs the VI Analyzer suite, each revision'],
+      'unit-tests':  ['Unit Tests',   'Runs the unit-test suite, each revision'],
+      'antidoc':     ['Antidoc',      'Generates project documentation, each revision']
+    };
+    var CAP_ORDER = ['snapshots','vidiff','masscompile','vi-analyzer','unit-tests','antidoc'];
     var DIFF_CAPS = { snapshots:1, vidiff:1 };  // the lean "diff-based" subset
+    // The activities offered are exactly the workers THIS repo actually has: any
+    // capability with at least one empty (never-run) cell to fill, plus any that
+    // already has results (shown so the picture is complete - queuing only ever
+    // fills empty cells). Driven by the live table, so a worker that isn't
+    // installed never appears and a newly-added one (e.g. Unit Tests) always does.
+    function histInstalledCaps(){
+      var seen={}; bfCells().forEach(function(x){ seen[x.cap]=1; });
+      return CAP_ORDER.filter(function(c){ return seen[c] || RAN[c]; });
+    }
     function histModal(){ return document.getElementById('cidash-hist-modal'); }
     function cidashHistClose(){ var m=histModal(); if(m) m.style.display='none'; document.body.style.overflow=''; }
     function histStatus(html, kind){
@@ -1694,7 +1717,9 @@ run_dialog = (r"""
     function histTokPanel(show){ var p=document.getElementById('cidash-hist-tok'); if(p) p.style.display = show ? 'block' : 'none'; }
     function histSelectedCaps(){
       var caps={};
-      HIST_CAPS.forEach(function(o){ var b=document.getElementById('cidash-hist-act-'+o[0]); if(b && b.checked && !b.disabled) caps[o[0]]=1; });
+      Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-actbox'), function(b){
+        if(b.checked && !b.disabled) caps[b.getAttribute('data-cap')]=1;
+      });
       return caps;
     }
     function histScopeMode(){ var r=document.querySelector('input[name="cidash-hist-scope"]:checked'); return r ? r.value : 'all'; }
@@ -1748,20 +1773,26 @@ run_dialog = (r"""
       }
       var go=document.getElementById('cidash-hist-go'); if(go) go.disabled = !runs;
     }
-    function histDiffApply(){
-      // The diff-based toggle constrains the run to Snapshots + VIDiff: when it is
-      // ON, Mass Compile + VI Analyzer are unchecked and greyed out; turning it OFF
-      // re-checks + re-enables them (its label promises "uncheck to also run" them).
-      // Only invoked from the toggle itself, so manually unchecking an activity
-      // afterwards is never overridden by a summary refresh.
-      var diff=document.getElementById('cidash-hist-diff');
-      var on = !!(diff && diff.checked);
-      HIST_CAPS.forEach(function(o){
-        if(DIFF_CAPS[o[0]]) return;
-        var b=document.getElementById('cidash-hist-act-'+o[0]);
-        var row=document.getElementById('cidash-hist-actrow-'+o[0]);
-        if(b){ b.disabled=on; b.checked=!on; }
-        if(row) row.classList.toggle('disabled', on);
+    function histApplyActivities(){
+      // Recompute every activity checkbox from the two optional presets. Invoked
+      // ONLY when a preset toggles (not on every box change) so a hand-tick is
+      // never clobbered by a summary refresh.
+      //  - "Diff-based" limits the selection to Snapshots + VIDiff. It is a pure
+      //    preset: it only (un)checks boxes, never disables them, so any worker can
+      //    still be re-ticked by hand (this is what the original "greyed out"
+      //    report was about — nothing is disabled here any more).
+      //  - "Only workers that haven't run yet" excludes the workers that already
+      //    have results somewhere in history, leaving just the brand-new ones;
+      //    those are unchecked AND disabled because excluding them is the whole
+      //    point of the option.
+      var diffOn  = !!(document.getElementById('cidash-hist-diff')   ||{}).checked;
+      var newOnly = !!(document.getElementById('cidash-hist-newonly')||{}).checked;
+      Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-actbox'), function(b){
+        var cap=b.getAttribute('data-cap');
+        var row=document.getElementById('cidash-hist-actrow-'+cap);
+        if(newOnly && RAN[cap]){ b.disabled=true; b.checked=false; }
+        else { b.disabled=false; b.checked = !(diffOn && !DIFF_CAPS[cap]); }
+        if(row) row.classList.toggle('disabled', b.disabled);
       });
     }
     function histRender(){
@@ -1783,13 +1814,20 @@ run_dialog = (r"""
       HIST.forEach(function(r){ h += '<label class="cidash-hist-specitem"><input type="checkbox" class="cidash-hist-spec" value="'+esc(r.sha)+'"><span class="sh">'+esc(r.short||'')+'</span><span class="ms">'+esc(r.msg||'')+'</span></label>'; });
       h += '</div></div>';
       h += '</div></div>';
-      h += '<div class="cidash-hist-sec"><label class="cidash-hist-toggle"><input type="checkbox" id="cidash-hist-diff" checked>'
+      h += '<div class="cidash-hist-sec"><label class="cidash-hist-toggle"><input type="checkbox" id="cidash-hist-diff">'
         + '<span><span class="cidash-hist-tmain">Diff-based \u2014 modified files only</span>'
-        + '<span class="cidash-hist-tsub">Runs just VI Snapshots and VIDiff (the visual history of what each revision changed). Uncheck to also run Mass Compile and VI Analyzer on every revision.</span></span></label></div>';
+        + '<span class="cidash-hist-tsub">Narrows the run to VI Snapshots and VIDiff (the visual history of what each revision changed). Leave it off to also run Mass Compile, VI Analyzer and the rest on every revision.</span></span></label>';
+      h += '<label class="cidash-hist-toggle" style="margin-top:8px"><input type="checkbox" id="cidash-hist-newonly">'
+        + '<span><span class="cidash-hist-tmain">Only workers that haven\u2019t run yet</span>'
+        + '<span class="cidash-hist-tsub">Skips any activity that already has results somewhere in history, so only brand-new workers \u2014 ones never run before \u2014 are queued.</span></span></label></div>';
+      var instCaps=histInstalledCaps();
       h += '<div class="cidash-hist-sec"><label class="cidash-hist-lbl">Activities</label><div class="cidash-hist-acts">';
-      HIST_CAPS.forEach(function(o){
-        h += '<label class="cidash-hist-act" id="cidash-hist-actrow-'+o[0]+'"><input type="checkbox" id="cidash-hist-act-'+o[0]+'" data-cap="'+o[0]+'" checked>'
-          + '<span>'+esc(o[1])+'</span><span class="cidash-hist-actsub">'+esc(o[2])+'</span></label>';
+      if(!instCaps.length){
+        h += '<div style="color:var(--fg-muted);font-size:.85em;padding:4px 2px">No runnable activities found for this repository.</div>';
+      } else instCaps.forEach(function(cap){
+        var m=CAP_META[cap]||[cap,''];
+        h += '<label class="cidash-hist-act" id="cidash-hist-actrow-'+cap+'"><input type="checkbox" class="cidash-hist-actbox" id="cidash-hist-act-'+cap+'" data-cap="'+cap+'" checked>'
+          + '<span>'+esc(m[0])+'</span><span class="cidash-hist-actsub">'+esc(m[1])+'</span></label>';
       });
       h += '</div></div>';
       h += '<div id="cidash-hist-tok" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin:0 0 12px">';
@@ -1807,19 +1845,20 @@ run_dialog = (r"""
       h += '<button class="cidash-btn cidash-go" id="cidash-hist-go">\u25B6 Queue runs</button>';
       h += '<button class="cidash-btn cidash-ghost" id="cidash-hist-cancel">Cancel</button></div>';
       body.innerHTML=h;
-      var diff=document.getElementById('cidash-hist-diff'); if(diff) diff.addEventListener('change', function(){ histDiffApply(); histRefresh(); });
+      var diff=document.getElementById('cidash-hist-diff'); if(diff) diff.addEventListener('change', function(){ histApplyActivities(); histRefresh(); });
+      var newonly=document.getElementById('cidash-hist-newonly'); if(newonly) newonly.addEventListener('change', function(){ histApplyActivities(); histRefresh(); });
       Array.prototype.forEach.call(document.querySelectorAll('input[name="cidash-hist-scope"]'), function(r){ r.addEventListener('change', function(){ histScopeApply(); histRefresh(); }); });
       var hf=document.getElementById('cidash-hist-from'); if(hf) hf.addEventListener('change', histRefresh);
       var ht=document.getElementById('cidash-hist-to'); if(ht) ht.addEventListener('change', histRefresh);
       Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.addEventListener('change', histRefresh); });
       var spa=document.getElementById('cidash-hist-spec-all'); if(spa) spa.addEventListener('click', function(e){ e.preventDefault(); Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.checked=true; }); histRefresh(); });
       var spn=document.getElementById('cidash-hist-spec-none'); if(spn) spn.addEventListener('click', function(e){ e.preventDefault(); Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.checked=false; }); histRefresh(); });
-      HIST_CAPS.forEach(function(o){ var b=document.getElementById('cidash-hist-act-'+o[0]); if(b) b.addEventListener('change', histRefresh); });
+      Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-actbox'), function(b){ b.addEventListener('change', histRefresh); });
       var go=document.getElementById('cidash-hist-go'); if(go) go.addEventListener('click', histRun);
       var cancel=document.getElementById('cidash-hist-cancel'); if(cancel) cancel.addEventListener('click', cidashHistClose);
       var save=document.getElementById('cidash-hist-tok-save'); if(save) save.addEventListener('click', function(){ var i=document.getElementById('cidash-hist-tok-input'); var v=(i&&i.value||'').trim(); if(!v){ if(i) i.focus(); return; } setTok(v); histTokPanel(false); histRun(); });
       var tin=document.getElementById('cidash-hist-tok-input'); if(tin) tin.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); var v=(tin.value||'').trim(); if(v){ setTok(v); histTokPanel(false); histRun(); } } });
-      histScopeApply(); histDiffApply(); histRefresh();
+      histScopeApply(); histApplyActivities(); histRefresh();
     }
     function histOpen(){
       var m=histModal(); if(!m) return;
@@ -1857,7 +1896,7 @@ run_dialog = (r"""
     if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); qSync(); bfInit(); }); }
     else { applyQueued(); qSync(); bfInit(); }
   })();
-  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__HIST__', hist_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
+  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__HIST__', hist_json).replace('__CAPS_RAN__', caps_ran_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
 
 # ── "Run CI for your whole history" card (fresh installs only) ───────────────
 # A brand-new dashboard has no results, so every project cell shows a one-click
@@ -1897,11 +1936,11 @@ if not any_output['on'] and not running_flag['on'] and run_count['n'] > 0:
         '<div class="lvci-bf-icon" aria-hidden="true">&#9889;</div>'
         '<div class="lvci-bf-text">'
         '<strong>Populate the dashboard with your history</strong>'
-        '<span>This dashboard has no results yet. Queue CI for all <b id="lvci-bf-count"></b> revisions in one click &mdash; processed <b>oldest&nbsp;&rarr;&nbsp;newest</b> so snapshots and diffs build on one another with no duplicated work. <a href="#" id="lvci-bf-custom" style="color:var(--link)">Choose activities or where to start&hellip;</a></span>'
+        '<span>This dashboard has no results yet. Populate it with CI for all <b id="lvci-bf-count"></b> revisions &mdash; processed <b>oldest&nbsp;&rarr;&nbsp;newest</b> so snapshots and diffs build on one another with no duplicated work. The button opens a <a href="#" id="lvci-bf-custom" style="color:var(--link)">chooser</a> where you pick what to run &mdash; nothing starts until you confirm.</span>'
         + bf_conc_html +
         '</div>'
         '<div class="lvci-bf-actions">'
-        '<button type="button" id="lvci-bf-run" class="cidash-btn cidash-go">&#9654; Run all history</button>'
+        '<button type="button" id="lvci-bf-run" class="cidash-btn cidash-go">&#9654; Populate history&hellip;</button>'
         '<button type="button" id="lvci-bf-dismiss" class="cidash-btn cidash-ghost">Dismiss</button>'
         '</div></div>'
         '<div id="lvci-bf-tok" class="lvci-bf-tok" style="display:none">'
