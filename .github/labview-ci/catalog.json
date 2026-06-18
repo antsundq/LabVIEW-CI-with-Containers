@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.4.4",
+  "version": "3.4.5",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.4.5",
+        "date": "2026-06-18",
+        "title": "VI Browser 2.0: a rejected render-token setup token can be fixed in place",
+        "summary": "After the connect-hang fix, a setup token that lacked permission - for example reusing the read:packages render token, which cannot write secrets - showed a clear error but left the bad token saved, so clicking Connect again just repeated the same error with no way to enter a different one. Now a rejected or insufficient setup token (401/403/404) is dropped automatically and the prompt reopens in place with specific guidance - including that the setup token is a separate, fine-grained token with Secrets and Variables set to Read and write, distinct from the render token - so you can paste a corrected token and finish without reloading. The render token you already pasted is kept, and the same in-place recovery now applies to the Actions: write token used by the Generate the 2.0 snapshot button.",
+        "highlights": [
+          "A rejected or under-scoped setup token is now cleared and re-requested in place instead of dead-ending on the error.",
+          "The prompt spells out that the setup token is a separate fine-grained token (Secrets + Variables: Read and write), not the read:packages render token.",
+          "The same in-place token recovery applies to the Actions: write token used to run the snapshot."
+        ]
+      },
       {
         "version": "3.4.4",
         "date": "2026-06-18",
