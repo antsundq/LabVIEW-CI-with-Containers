@@ -714,9 +714,16 @@ if lvci_version:
         '}).then(function(done){if(done)return done;'
         # 3) Otherwise the normal "update available" check (clients only): flag the
         #    badge amber + pulsing dot when the source publishes a newer release.
+        #    First follow the relocation pointer (source.json) so a moved project is
+        #    compared against its new official home; the badge links to whats-new.html,
+        #    which shows the move and re-points this repo on update.
         'if(C.isSource||!C.sourceRepo)return;'
-        'fetch("https://raw.githubusercontent.com/"+C.sourceRepo+"/"+C.sourceRef+"/.github/labview-ci/catalog.json",{cache:"no-store"})'
-        '.then(function(r){return r.ok?r.json():null;}).then(function(cat){'
+        'var sR=C.sourceRepo,sF=C.sourceRef;'
+        'fetch("https://raw.githubusercontent.com/"+sR+"/"+sF+"/.github/labview-ci/source.json",{cache:"no-store"})'
+        '.then(function(r){return r.ok?r.json():null;}).then(function(p){'
+        'if(p&&p.repo&&p.repo.toLowerCase()!==sR.toLowerCase()){sR=p.repo;sF=p.ref||sF;}'
+        'return fetch("https://raw.githubusercontent.com/"+sR+"/"+sF+"/.github/labview-ci/catalog.json",{cache:"no-store"});'
+        '}).then(function(r){return r.ok?r.json():null;}).then(function(cat){'
         'if(!cat||!cat.version||cmp(cat.version,C.version)<=0)return;'
         'var d=document.getElementById("lvci-update-dot");'
         'b.classList.remove("lvci-clickable");b.classList.add("lvci-has-update");if(d)d.classList.add("on");'
