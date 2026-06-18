@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.4.11",
+  "version": "3.4.12",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.4.12",
+        "date": "2026-06-18",
+        "title": "Apply to New Repo: VI Browser 2.0 render setup removed from install",
+        "summary": "The Apply to New Repo / Integrate page no longer includes the optional \"VI Browser 2.0 - position-aware renders\" panel for setting a private render image and read-token. That configuration does not need to be done at install time and is still available later from the dashboard's own VI Browser 2.0 setup wizard, which provisions the same render image and token when you choose to enable the in-place 2.0 view. Because that panel was the only part of the installer that writes a repository secret, the pre-filled install token no longer requests the Secrets permission; Variables (used to pin your settings) and the other permissions are unchanged. There is no change to an already-installed pipeline.",
+        "highlights": [
+          "The installer's optional VI Browser 2.0 render-image/token panel is removed - that setup is not needed at install time.",
+          "VI Browser 2.0 can still be provisioned later from the dashboard's own VI Browser setup wizard.",
+          "The pre-filled install token no longer requests Secrets (it was only used by that panel); Variables and the other permissions are unchanged."
+        ]
+      },
       {
         "version": "3.4.11",
         "date": "2026-06-18",
