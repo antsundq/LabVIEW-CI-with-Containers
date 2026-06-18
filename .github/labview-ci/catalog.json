@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.4.7",
+  "version": "3.4.8",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.4.8",
+        "date": "2026-06-18",
+        "title": "Clarification: code compatibility comes from your project save setting",
+        "summary": "The LabVIEW version used by CI stays fixed at the year the tooling is built for, and that is unchanged. An earlier note (3.4.3) said a future update would add a separate code-compatibility selector to the configurator; that is no longer planned. Keeping your code compatible with an older LabVIEW run-time is already handled by your project's own save-for-previous-version setting stored in the .lvproj, which the container honors when it opens the project to build and analyze it - so no extra control in the configurator is needed. This release only corrects the configurator's in-code notes and this guidance; there is no behavior change.",
+        "highlights": [
+          "Documentation-only clarification: the fixed LabVIEW version used by CI is unchanged.",
+          "Code compatibility with older run-times comes from your project's .lvproj save setting, which the container honors - not from a configurator option.",
+          "Supersedes the 3.4.3 note that mentioned a future code-compatibility picker; that control is not planned."
+        ]
+      },
       {
         "version": "3.4.7",
         "date": "2026-06-18",
