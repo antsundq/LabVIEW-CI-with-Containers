@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.4.28",
+  "version": "3.4.29",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.4.29",
+        "date": "2026-06-18",
+        "title": "Queued cells stay put until the run finishes - and show a clickable red error if it fails",
+        "summary": "When you queue an activity from a dashboard cell - a single Run now, a re-run, or a whole-history backfill - the cell's 'Queued' badge now stays put until that run actually finishes, even if you close the dashboard and come back much later. Previously the optimistic badge was only remembered for about twenty minutes and then quietly reverted to the run button, so a run still waiting behind GitHub's concurrency limit looked like it had vanished with no result. The dashboard now keeps each queued cell tied to its real GitHub run and reconciles it on every visit - looking the run up directly when it is too old to appear in recent activity - so a run that is still queued or running keeps its badge for as long as it takes, a finished run hands off to the normal pass/fail result, and a run that errored turns the cell into a sticky red exclamation you can click to open the failed run and see exactly what went wrong.",
+        "highlights": [
+          "A queued cell now persists until its run finishes - closing the dashboard and coming back later no longer makes the 'Queued' badge disappear.",
+          "Runs are reconciled against GitHub on every visit, and looked up directly by id when too old to show in recent activity, so a run held behind the concurrency limit keeps its place instead of timing out.",
+          "A failed run now marks the cell with a clickable red error badge that opens the run on GitHub to show what went wrong, instead of silently reverting to the run button."
+        ]
+      },
       {
         "version": "3.4.28",
         "date": "2026-06-18",
