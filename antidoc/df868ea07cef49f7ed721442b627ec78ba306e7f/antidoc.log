@@ -1,0 +1,2 @@
+﻿Antidoc run started 2026-06-18T12:26:41.1091406+00:00
+ERROR: g-cli was not found in the image. Antidoc runs through g-cli (wiresmith_technology_lib_g_cli). Enable "Use Antidoc" in Configure so the Antidoc VIPC is baked into the worker image.
