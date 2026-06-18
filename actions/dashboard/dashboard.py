@@ -2020,6 +2020,9 @@ for _name, _dst in [
     ('configure.html', 'ci-out/dashboard/configure.html'),
     ('integrate.html', 'ci-out/dashboard/integrate.html'),
     ('unit-tests.html', 'ci-out/dashboard/unit-tests.html'),
+    # Clients registry page (the header only surfaces it on the root repo, where
+    # the discovery workflow publishes clients.json beside it).
+    ('clients.html', 'ci-out/dashboard/clients.html'),
 ]:
     _stage(os.path.join(_pages_src, _name), _dst)
 # Deploy a catalog.json at the Pages root so the version badge + What's New can
