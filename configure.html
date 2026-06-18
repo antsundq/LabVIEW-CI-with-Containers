@@ -401,8 +401,9 @@
     // year, so reconfiguring to another year asked for an image that doesn't exist
     // and broke every container job. Ignore the repo's stored value and always show
     // that year, disabled -- so saving heals a repo pinned to an unsupported year.
-    // FUTURE: re-enable as a 2017..2026 code-compatibility picker that writes the
-    // LabVIEW project "Save Setting" (2026 editor, older-compatible code), not the tag.
+    // Code COMPATIBILITY with an older LabVIEW run-time is owned by the project's own
+    // .lvproj "save for previous version" setting, honored by the 2026 container -- so
+    // this field stays permanently locked and needs no version/compatibility picker.
     function renderVersions(sel) {
       const el = $("version");
       const locked = (catalog.defaults && catalog.defaults.labviewVersion) || "2026";

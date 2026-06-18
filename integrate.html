@@ -338,9 +338,10 @@
     // jobs to pull a container image / use a LabVIEW path that doesn't exist,
     // which failed every container run -- the bug a colleague hit by picking 2024.
     // So render only that year, selected and disabled (grayed out).
-    // FUTURE: re-enable as a 2017..2026 *code-compatibility* picker that keeps the
-    // editor/container on 2026 but writes the LabVIEW project "Save Setting" so the
-    // 2026 editor saves code compatible with an older run-time.
+    // Code COMPATIBILITY with an older LabVIEW run-time is NOT handled here: it is
+    // owned by the project's own .lvproj "save for previous version" setting, which
+    // the 2026 container honors when it opens the project. So this field stays
+    // permanently locked -- no version/compatibility picker is needed.
     function renderVersions() {
       const sel = $("version");
       const locked = (catalog.defaults && catalog.defaults.labviewVersion) || "2026";
