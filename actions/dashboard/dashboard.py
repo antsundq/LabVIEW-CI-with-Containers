@@ -1057,15 +1057,22 @@ run_dialog = (r"""
       });
     }
     function markQueued(c, sha, plats, parent, ts){
-      var o = qLoad();
-      o[c+'|'+sha] = { ts: ts || Date.now(), plats: plats||[], parent: parent||'', short: (sha||'').slice(0,7), runs: [] };
-      qSave(o);
-      var a = document.querySelector('a.cidash-run[data-cap="'+c+'"][data-sha="'+sha+'"]');
-      var td = a ? (a.closest ? a.closest('td') : null)
-                 : document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
-      qPaint(td, c, sha);
-      qArmReload();
-      qRenumber();
+      try {
+        var o = qLoad(); var key = c+'|'+sha; var prev = o[key] || {};
+        // Re-marking a cell (e.g. once its dispatch confirms which platforms took)
+        // must NOT wipe a run id already captured for it, so carry runs/ts forward.
+        o[key] = { ts: ts || prev.ts || Date.now(), plats: plats || prev.plats || [], parent: parent || prev.parent || '',
+                   short: (sha||'').slice(0,7), runs: prev.runs || [] };
+        qSave(o);
+      } catch(e){}
+      try {
+        var a = document.querySelector('a.cidash-run[data-cap="'+c+'"][data-sha="'+sha+'"]');
+        var td = a ? (a.closest ? a.closest('td') : null)
+                   : document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
+        qPaint(td, c, sha);
+        qArmReload();
+        qRenumber();
+      } catch(e){}
     }
     function qForget(c, sha){
       // Drop the optimistic entry and restore the cell's run glyph so the cell is
@@ -1592,6 +1599,12 @@ run_dialog = (r"""
       perRev.sort(function(a,b){ return b.order - a.order; });   // oldest first
       var total=perRev.length + (sawSnap?1:0);
       var t0=Date.now(); var ok=0, err=0, done=0;
+      // Paint EVERY targeted cell as "Queued" up front, in one synchronous pass, so
+      // the whole batch lights up the instant you click - independent of the throttled
+      // dispatch chain below. A dispatch that truly fails then reverts just its own
+      // cell, and a thrown error mid-chain can no longer leave the earlier cells un-queued.
+      if(sawSnap){ snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); }
+      perRev.forEach(function(x){ var d=RT[x.cap]; if(d) markQueued(x.cap, x.sha, Object.keys(d.platforms), x.parent, t0); });
       statusFn('Queuing '+total+' workflow'+(total>1?'s':'')+'\u2026', null);
       var chain=Promise.resolve();
       // 1) Snapshots — one backfill run for the whole history (oldest→newest, deduped).
@@ -1599,10 +1612,10 @@ run_dialog = (r"""
         chain=chain.then(function(){
           return dispatchOne('vi-snapshots.yml', { mode:'backfill' }).then(function(r){
             done++;
-            if(r.ok){ ok++; snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); captureSnapshotRun(t0); }
-            else { err++; if(r.status===401) clearTok(); }
+            if(r.ok){ ok++; captureSnapshotRun(t0); }
+            else { err++; if(r.status===401) clearTok(); snapShas.forEach(function(sha){ qForget('snapshots', sha); }); }
             statusFn('Queuing\u2026 '+done+'/'+total, null);
-          });
+          }).catch(function(){ err++; });
         });
       }
       // 2) Per-revision capabilities, oldest first, gently throttled.
@@ -1615,11 +1628,12 @@ run_dialog = (r"""
             done++;
             if(results.some(function(r){return r.status===401;})) clearTok();
             var okPlats=results.filter(function(r){return r.ok;}).map(function(r){return r.plat;});
-            if(okPlats.length){ ok++; markQueued(x.cap, x.sha, okPlats, x.parent, Date.now()); captureRuns(x.cap, x.sha); }
-            else { err++; }
+            if(okPlats.length){ ok++; markQueued(x.cap, x.sha, okPlats, x.parent, t0); captureRuns(x.cap, x.sha); }
+            else { err++; qForget(x.cap, x.sha); }
             statusFn('Queuing\u2026 '+done+'/'+total, null);
-          }).then(function(){ return new Promise(function(res){ setTimeout(res, 650); }); });
-        });
+          });
+        }).catch(function(){ /* one cell's error never aborts the rest */ })
+          .then(function(){ return new Promise(function(res){ setTimeout(res, 650); }); });
       });
       return chain.then(function(){ return { ok:ok, err:err, total:total }; });
     }

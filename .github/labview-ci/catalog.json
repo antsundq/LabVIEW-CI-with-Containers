@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.4.31",
+  "version": "3.4.32",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.4.32",
+        "date": "2026-06-18",
+        "title": "Queue all history: every cell shows 'Queued' the instant you click, and one failed dispatch can't stop the rest",
+        "summary": "When you click Run all history (or queue activities from the Populate history dialog), every targeted cell now turns into a 'Queued' badge the instant you click - in a single pass, before the throttled dispatch even starts - so the whole batch visibly lights up at once instead of trickling in one cell at a time. Previously each cell was only marked after its own dispatch returned, in sequence, so if any single dispatch was slow, errored, or threw partway through, the cells after it could be left looking unqueued even though you asked to run them - and in the worst case the activities still waiting in line were never dispatched at all. The dispatch sequence is now resilient: each activity is queued independently, a failure reverts only its own cell (and is reported), and no single error can abort the rest. A cell whose dispatch genuinely fails returns to its run button so you can retry just that one.",
+        "highlights": [
+          "Run all history (and Populate history) now paint every targeted cell 'Queued' immediately on click, as one batch, instead of one at a time as each dispatch returns.",
+          "A slow, failed, or throwing dispatch can no longer stop the remaining activities from being queued - each cell is dispatched independently and the sequence always continues.",
+          "If a cell's dispatch truly fails it reverts to its run button and the failure is reported, so the dashboard never shows a phantom 'Queued' for something that did not start."
+        ]
+      },
       {
         "version": "3.4.31",
         "date": "2026-06-18",
