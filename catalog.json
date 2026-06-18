@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.4.18",
+  "version": "3.4.19",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.4.19",
+        "date": "2026-06-18",
+        "title": "Re-running a check against a past commit no longer fails to start",
+        "summary": "Fixes a problem when you use Run workflow and type a specific commit to re-check (for example to backfill a report for an older commit): the job stopped immediately with \"fatal: invalid reference: origin/main\" instead of running. When you target a past commit the workflows first restore their CI scripts from the main branch, but they referred to a branch reference that isn't available after checking out a single commit. They now fetch main explicitly before restoring, so dispatching Mass Compile, VI Analyzer, VIDiff, Unit Tests or Antidoc against any commit works again. Runs from a push, a pull request, or Run workflow against the current commit were never affected. Update to pick up the fix in your repository's workflows.",
+        "highlights": [
+          "Run workflow against a specific past commit now starts correctly - the \"invalid reference: origin/main\" (exit 128) failure is fixed across the Mass Compile, VI Analyzer, VIDiff, Unit Tests and Antidoc container workflows (Windows and Linux).",
+          "The workflows now fetch the main branch explicitly before restoring their CI scripts, instead of relying on a remote-tracking branch that isn't present after a single-commit checkout.",
+          "Push, pull request, and Run-workflow-against-current-commit runs were unaffected; update to get the fix in your installed workflows."
+        ]
+      },
       {
         "version": "3.4.18",
         "date": "2026-06-18",
