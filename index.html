@@ -55,6 +55,9 @@
        "optimistic" ring) so an error shows instead of the cell silently reverting. */
     .run-badge.cidash-failed{background:#da3633;outline:none}
     .run-spin{width:9px;height:9px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;display:inline-block;animation:cidash-spin .7s linear infinite}
+    /* The Queued badge places the spinner directly before its label (no flex gap),
+       so give the spinner a small right margin to keep the icon off the "Q". */
+    .run-badge.cidash-queued .run-spin{margin-right:5px}
     @keyframes cidash-spin{to{transform:rotate(360deg)}}
     .cidash-run{display:inline-block;color:var(--fg-muted);font-size:.95em;line-height:1;text-decoration:none;opacity:.5;transition:opacity .12s,color .12s}.cidash-run:hover{opacity:1;color:var(--link);text-decoration:none}tr:hover .cidash-run{opacity:.85}.cidash-btn{border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:.85em;font-weight:600;cursor:pointer;font-family:inherit}.cidash-go{background:#238636;color:#fff;border-color:transparent}.cidash-go:hover{background:#2ea043}.cidash-go:disabled{opacity:.6;cursor:default}.cidash-ghost{background:var(--bg);color:var(--fg)}.cidash-ghost:hover{border-color:var(--link)}.cidash-danger{background:#da3633;color:#fff;border-color:transparent}.cidash-danger:hover{background:#f85149}.cidash-danger:disabled{opacity:.6;cursor:default}.cidash-queued{cursor:pointer}.cidash-queued:hover{filter:brightness(1.13)}.cidash-queued:focus-visible{outline:2px solid var(--link);outline-offset:1px}.cidash-qpos{margin-left:5px;font-weight:700;opacity:.92;font-variant-numeric:tabular-nums}.cidash-qpos:empty{display:none}.lvci-backfill{border:1px solid var(--border);border-left:3px solid #1f6feb;background:var(--surface);border-radius:10px;padding:14px 16px;margin:0 0 18px}.lvci-bf-main{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.lvci-bf-icon{font-size:1.5em;line-height:1}.lvci-bf-text{flex:1 1 320px;min-width:240px;font-size:.9em;line-height:1.5}.lvci-bf-text strong{display:block;font-size:1.03em;margin-bottom:2px}.lvci-bf-text span{color:var(--fg-muted)}.lvci-bf-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.lvci-bf-tok{margin-top:12px;border-top:1px solid var(--border);padding-top:12px;font-size:.84em;color:var(--fg-muted)}.lvci-bf-status{font-size:.82em;margin-top:10px}.lvci-bf-status:empty{display:none}.lvci-bf-note{display:block;margin-top:8px}.lvci-bf-info{margin-top:8px;font-size:.92em}.lvci-bf-info>summary{display:inline-block;cursor:pointer;color:var(--link);list-style:none;font-weight:600}.lvci-bf-info>summary::-webkit-details-marker{display:none}.lvci-bf-info>summary:hover{text-decoration:underline}.lvci-bf-info[open]>summary{margin-bottom:8px}.lvci-bf-infobody{color:var(--fg-muted);line-height:1.55;border-left:2px solid #1f6feb;padding-left:12px}.lvci-bf-cfg{display:inline-block;margin-top:8px;color:var(--link);font-weight:600}.cidash-hist-sec{margin:0 0 16px}.cidash-hist-lbl{display:block;font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-muted);margin:0 0 7px}.cidash-hist-scope{display:flex;flex-direction:column;gap:9px}.cidash-hist-radio{display:flex;align-items:center;gap:9px;font-size:.9em;cursor:pointer;user-select:none}.cidash-hist-radio input{accent-color:var(--link);width:15px;height:15px;margin:0;flex:0 0 auto}.cidash-hist-radio .sub{color:var(--fg-muted);font-size:.88em}.cidash-hist-rangerow{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:2px 0 4px 25px}.cidash-hist-rangerow label{display:flex;align-items:center;gap:7px;font-size:.84em;color:var(--fg-muted)}#cidash-hist-from,#cidash-hist-to{padding:7px 9px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:.85em;font-family:inherit;max-width:248px}.cidash-hist-spectools{display:flex;gap:14px;margin:2px 0 6px 25px;font-size:.8em}.cidash-hist-spectools a{color:var(--link);cursor:pointer}.cidash-hist-spectools a:hover{text-decoration:underline}.cidash-hist-speclist{display:flex;flex-direction:column;gap:1px;max-height:210px;overflow:auto;margin-left:25px;padding:5px;border:1px solid var(--border);border-radius:7px;background:var(--bg)}.cidash-hist-specitem{display:flex;align-items:center;gap:9px;padding:5px 7px;border-radius:5px;font-size:.84em;cursor:pointer;min-width:0}.cidash-hist-specitem:hover{background:var(--surface)}.cidash-hist-specitem input{accent-color:var(--link);width:14px;height:14px;margin:0;flex:0 0 auto}.cidash-hist-specitem .sh{font-family:ui-monospace,Menlo,monospace;color:var(--fg-muted);flex:0 0 auto}.cidash-hist-specitem .ms{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}.cidash-hist-acts{display:flex;flex-direction:column;gap:7px}.cidash-hist-act{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--border);border-radius:7px;background:var(--bg);cursor:pointer;font-size:.88em;user-select:none}.cidash-hist-act:hover{border-color:var(--link)}.cidash-hist-act input{accent-color:var(--link);width:15px;height:15px;margin:0;flex:0 0 auto}.cidash-hist-act .cidash-hist-actsub{color:var(--fg-muted);font-size:.85em;margin-left:auto;text-align:right}.cidash-hist-act.disabled{opacity:.45;cursor:default}.cidash-hist-act.disabled:hover{border-color:var(--border)}.cidash-hist-toggle{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid var(--border);border-left:3px solid #1f6feb;border-radius:8px;background:var(--surface);cursor:pointer;font-size:.88em;user-select:none}.cidash-hist-toggle input{accent-color:var(--link);width:15px;height:15px;margin:2px 0 0;flex:0 0 auto}.cidash-hist-toggle .cidash-hist-tmain{font-weight:600}.cidash-hist-toggle .cidash-hist-tsub{color:var(--fg-muted);font-size:.9em;margin-top:2px;font-weight:400}.cidash-hist-summary{font-size:.84em;color:var(--fg-muted);margin:0 0 12px}.cidash-hist-summary b{color:var(--fg)}
   </style>
@@ -1001,7 +1004,7 @@
   </script>
   <main class="lvci-main">
   <h1>CI Dashboard — LabVIEW-CI-with-Containers</h1>
-  <div class="sub">Last updated: 2026-06-18 12:09 UTC &nbsp;|&nbsp; Live — refreshing every 60 s while CI runs</div>
+  <div class="sub">Last updated: 2026-06-18 12:19 UTC &nbsp;|&nbsp; Live — refreshing every 60 s while CI runs</div>
   <div class="nav">
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers">GitHub</a>
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers/actions">Actions</a>
@@ -1031,6 +1034,21 @@
       </tr>
     </thead>
     <tbody>
+    <tr data-project="false">
+      <td style="padding:8px;font-family:monospace;font-size:.85em">
+        <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=18fa9d7f14863f113b3ba45d66d0991b317a7555" style="color:var(--link)" title="Browse this commit's VIs in the VI Browser">18fa9d7</a>
+      </td>
+      <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Dashboard: space the Queued badge spinner off its label"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=18fa9d7f14863f113b3ba45d66d0991b317a7555" style="color:var(--fg)">Dashboard: space the Queued badge spinner off its label</a></td>
+      <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">Elijah Kerry</td>
+      <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-06-18</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+    </tr>
+
     <tr data-project="false">
       <td style="padding:8px;font-family:monospace;font-size:.85em">
         <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=6b799a9f447e50ea746cf7febac83457961e869c" style="color:var(--link)" title="Browse this commit's VIs in the VI Browser">6b799a9</a>
@@ -2506,21 +2524,6 @@
         <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=22d63b8f9f761e27b53e2de484875cb95aa07578" style="color:var(--link)" title="Browse this commit's VIs in the VI Browser">22d63b8</a>
       </td>
       <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="feat(dashboard): show a cell as Queued the moment Run now dispatches (1.7.5)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=22d63b8f9f761e27b53e2de484875cb95aa07578" style="color:var(--fg)">feat(dashboard): show a cell as Queued the moment Run now dispatches (1.7.5)</a></td>
-      <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">elijah286</td>
-      <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-06-16</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-    </tr>
-
-    <tr data-project="false">
-      <td style="padding:8px;font-family:monospace;font-size:.85em">
-        <a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=ca68d3a34b0cdb2dc960ee63d91e434eb69dbdf1" style="color:var(--link)" title="Browse this commit's VIs in the VI Browser">ca68d3a</a>
-      </td>
-      <td style="padding:8px;font-size:.85em;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="fix(dashboard): actionable 403 + clearer token setup for Run now (1.7.4)"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=ca68d3a34b0cdb2dc960ee63d91e434eb69dbdf1" style="color:var(--fg)">fix(dashboard): actionable 403 + clearer token setup for Run now (1.7.4)</a></td>
       <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">elijah286</td>
       <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">2026-06-16</td>
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
