@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.6.2",
+  "version": "3.6.3",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.6.3",
+        "date": "2026-06-19",
+        "title": "VI Browser: a new VI shows a \"New\" badge, and Diff is reserved for actual changes",
+        "summary": "In the VI Browser file tree, every changed VI used to show the same \"diff\" badge - even a brand-new VI that has no previous version to compare against, so clicking it opened a diff view that could not show a meaningful comparison. A VI that is new in the selected revision now shows a green \"New\" badge that opens its snapshot, while a modified VI keeps the brown \"Diff\" badge. The Diff view - and the toolbar's Diff toggle and \"View diff report\" link - is offered only for an actual change: selecting Diff shows only the side-by-side report, or a clear note when one has not been generated yet, and never falls back to the 1.0 or 2.0 visualization. A stale view=diff link to a new VI now opens its snapshot instead.",
+        "highlights": [
+          "A VI that is new in a revision shows a green \"New\" badge (instead of \"diff\") and opens its snapshot; a modified VI shows the brown \"Diff\" badge.",
+          "The Diff toggle and the \"View diff report\" link appear only for a modified VI; for a new VI the Diff toggle is grayed out with a tip that there is no earlier version to compare.",
+          "Selecting Diff shows only the side-by-side report, or a note when it has not been generated yet - it never shows the 1.0 or 2.0 render."
+        ]
+      },
       {
         "version": "3.6.2",
         "date": "2026-06-19",
