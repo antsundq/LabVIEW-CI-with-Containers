@@ -291,8 +291,10 @@ function Invoke-UtfTests($tool, [int]$index) {
         Write-Host "  [utf] $cmd"
 
         $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $cliOut = ''
         try {
-            & cmd.exe /c $cmd 2>&1 | Out-Host
+            $cliOut = (& cmd.exe /c $cmd 2>&1 | Out-String)
+            Write-Host $cliOut
             Write-Host ("  [utf] exit={0}" -f $LASTEXITCODE)
         } catch {
             Write-Warning "  [utf] runner error: $($_.Exception.Message)"
@@ -300,7 +302,25 @@ function Invoke-UtfTests($tool, [int]$index) {
         $ErrorActionPreference = $prevEAP
 
         if (Test-Path -LiteralPath $out) { Write-Host "  [utf] wrote $out" }
-        else { Write-Warning "  [utf] produced no JUnit at $out (check the RunUnitTests output above; override with the tool's command: key)." }
+        else {
+            Write-Warning "  [utf] produced no JUnit at $out (check the RunUnitTests output above; override with the tool's command: key)."
+            # The LabVIEWCLI console error (e.g. -350053) is generic; the actual
+            # detail (which VI is broken / which module is missing) is written to
+            # the CLI's own session log. Echo it so failures are diagnosable.
+            $m = [regex]::Match($cliOut, '(?i)started logging in file:\s*(.+\.log)')
+            if ($m.Success) {
+                $logPath = $m.Groups[1].Value.Trim()
+                Write-Host "  [utf] --- LabVIEW CLI session log ($logPath) ---"
+                if (Test-Path -LiteralPath $logPath) {
+                    Get-Content -LiteralPath $logPath | ForEach-Object { Write-Host "  [utf-log] $_" }
+                } else {
+                    Write-Host "  [utf] (session log not found on disk)"
+                }
+                Write-Host "  [utf] --- end LabVIEW CLI session log ---"
+            } else {
+                Write-Host "  [utf] (no CLI session-log path found in output)"
+            }
+        }
         $i++
     }
 }
