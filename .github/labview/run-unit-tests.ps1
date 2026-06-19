@@ -197,6 +197,47 @@ function Repair-UtfJunitLibrary([string]$LvPath) {
     Write-Host '===== end repair ====='
 }
 
+# FIX (layer 2): utf junit report.lvlib:create junit report.vi depends on NI's
+# "JUnit Results API" (JUnit API.lvlib) at "<vilib>:\ni\JUnit Results API\" (incl.
+# a Controls\ subfolder). That API historically shipped in LabVIEW vi.lib but is
+# absent from this LabVIEW 2026 per-version vi.lib, so create junit report.vi still
+# loads broken. Locate the JUnit Results API wherever it landed (e.g. inside the UTF
+# add-on under LVAddons) and mirror the whole library folder into vi.lib.
+function Repair-JUnitResultsApi([string]$LvPath) {
+    Write-Host '===== NI JUnit Results API repair ====='
+    $lvRoot = if ($LvPath) { Split-Path -Parent $LvPath } else { '' }
+    if (-not $lvRoot) { Write-Host '  (no LabVIEW path; skipping)'; return }
+    $target = Join-Path $lvRoot 'vi.lib\ni\JUnit Results API'
+    if (Test-Path -LiteralPath (Join-Path $target 'Create JUnit Root.vi')) {
+        Write-Host "  already present: $target"
+        Write-Host '===== end repair ====='
+        return
+    }
+    $src = $null
+    foreach ($r in @('C:\Program Files\NI\LVAddons',
+                     'C:\Program Files\National Instruments',
+                     'C:\Program Files (x86)\National Instruments')) {
+        if (-not (Test-Path -LiteralPath $r)) { continue }
+        $hit = Get-ChildItem -LiteralPath $r -Recurse -File -Filter 'Create JUnit Root.vi' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($hit) { $src = Split-Path -Parent $hit.FullName; break }
+    }
+    if (-not $src) {
+        Write-Host "  'Create JUnit Root.vi' NOT FOUND on container; JUnit Results API must be vendored."
+        Write-Host '===== end repair ====='
+        return
+    }
+    Write-Host "  source JUnit Results API: $src"
+    try {
+        New-Item -ItemType Directory -Force -Path $target | Out-Null
+        Copy-Item -LiteralPath (Join-Path $src '*') -Destination $target -Recurse -Force -ErrorAction Stop
+        Write-Host "  mirrored -> $target"
+    } catch {
+        Write-Host "  (copy failed: $($_.Exception.Message))"
+    }
+    Write-Host '===== end repair ====='
+}
+
 # -- Resolve LabVIEW / LabVIEWCLI / g-cli (mirror run-vi-analyzer.ps1) ----------
 function Resolve-LabVIEWPath([string]$PreferredPath) {
     if ($PreferredPath -and (Test-Path $PreferredPath)) { return $PreferredPath }
@@ -432,6 +473,7 @@ function Invoke-UtfTests($tool, [int]$index) {
 
     Show-UtfAddonsDiag $LabVIEWPath
     Repair-UtfJunitLibrary $LabVIEWPath
+    Repair-JUnitResultsApi $LabVIEWPath
     Show-UtfOperationProbe $CliExe $LabVIEWPath
 
     $tmpl = if ($tool.command) { $tool.command } else { $UTF_DEFAULT_CMD }
