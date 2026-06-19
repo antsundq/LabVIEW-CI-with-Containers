@@ -130,7 +130,7 @@ function Show-UtfOperationProbe([string]$Cli, [string]$LvPath) {
     }
     if ($Cli -and $LvPath -and (Test-Path -LiteralPath $opDir)) {
         Write-Host "--- MassCompile: $opDir ---"
-        $mcArgs = @('-OperationName','MassCompile','-DirectoryToCompile',$opDir,'-LabVIEWPath',$LvPath,'-LogToConsole','TRUE')
+        $mcArgs = @('-LogToConsole','TRUE','-OperationName','MassCompile','-DirectoryToCompile',$opDir,'-LabVIEWPath',$LvPath,'-Headless')
         $prev = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
         try {
             $mcOut = (& $Cli @mcArgs 2>&1 | Out-String)
