@@ -1,10 +1,10 @@
 [
   {
-    "sha": "e367194dd343af49dab37334193812a46447902d",
-    "short": "e367194",
-    "message": "Merge branch 'main' of https://github.com/elijah286/LabVIEW-CI-with-Containers",
+    "sha": "0906bc04e7e306ee32e333eddb1e811fa02cdb88",
+    "short": "0906bc0",
+    "message": "Integrate VI Browser 2.0 render engine; self-build per client; drop render-token setup (v3.5.0)",
     "author": "Elijah Kerry",
-    "date": "2026-06-18T18:06:33-05:00",
+    "date": "2026-06-18T20:04:58-05:00",
     "vi_count": 54
   }
 ]
