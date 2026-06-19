@@ -1,10 +1,10 @@
 [
   {
-    "sha": "0906bc04e7e306ee32e333eddb1e811fa02cdb88",
-    "short": "0906bc0",
-    "message": "Integrate VI Browser 2.0 render engine; self-build per client; drop render-token setup (v3.5.0)",
+    "sha": "fc0bca922508640f4ef656455b41d89fa51e2909",
+    "short": "fc0bca9",
+    "message": "unit tests: run NI Unit Test Framework (UTF) tests headlessly in CI (v3.6.0)",
     "author": "Elijah Kerry",
-    "date": "2026-06-18T20:04:58-05:00",
+    "date": "2026-06-18T23:13:47-05:00",
     "vi_count": 54
   }
 ]
