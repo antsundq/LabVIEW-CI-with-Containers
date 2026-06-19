@@ -2439,6 +2439,7 @@ for _name, _dst in [
     ('report-viewer.html', 'ci-out/dashboard/report/index.html'),
     ('whats-new.html', 'ci-out/dashboard/whats-new.html'),
     ('configure.html', 'ci-out/dashboard/configure.html'),
+    ('vi-analyzer.html', 'ci-out/dashboard/vi-analyzer.html'),
     ('integrate.html', 'ci-out/dashboard/integrate.html'),
     ('unit-tests.html', 'ci-out/dashboard/unit-tests.html'),
     # Clients registry page (the header only surfaces it on the root repo, where

@@ -9,22 +9,23 @@ on:
   workflow_dispatch:
     inputs:
       labview_version:
-        description: 'LabVIEW year (e.g. 2026)'
+        description: 'LabVIEW year (e.g. 2026; blank = keep current)'
         required: false
-        default: '2026'
+        default: ''
       operating_systems:
-        description: 'Which platforms the pipeline targets'
+        description: 'Which platforms the pipeline targets (keep = leave unchanged)'
         type: choice
-        options: [both, windows, linux]
-        default: both
+        options: [keep, both, windows, linux]
+        default: keep
       antidoc:
-        description: 'Bake Antidoc (Wovalab doc generation) into the worker image'
-        type: boolean
-        default: true
+        description: 'Bake Antidoc (Wovalab doc generation) into the worker image (keep = leave unchanged)'
+        type: choice
+        options: [keep, 'true', 'false']
+        default: keep
       concurrent_runners:
-        description: 'Per-repo cap on parallel CI jobs. GitHub limits concurrency per ACCOUNT (Free 20, Pro 40, Team 60, Enterprise 500) shared across all your repos, so keep it modest. Default 5.'
+        description: 'Per-repo cap on parallel CI jobs (blank = keep current). GitHub limits concurrency per ACCOUNT (Free 20, Pro 40, Team 60, Enterprise 500) shared across all your repos, so keep it modest.'
         required: false
-        default: '5'
+        default: ''
       activities:
         description: 'Comma-separated capability ids (blank = keep current)'
         required: false
@@ -96,9 +97,9 @@ jobs:
           python3 - <<'PY'
           import os, re, json, datetime, pathlib
 
-          ver     = os.environ['IN_VERSION'].strip() or '2026'
-          oss     = os.environ['IN_OS'].strip() or 'both'
-          antidoc = os.environ['IN_ANTIDOC'].strip().lower() == 'true'
+          ver_in  = os.environ['IN_VERSION'].strip()
+          oss     = os.environ['IN_OS'].strip()
+          antidoc_in = os.environ['IN_ANTIDOC'].strip().lower()
           runners = os.environ['IN_RUNNERS'].strip()
           acts_in = os.environ['IN_ACTS'].strip()
           container_use_in = os.environ.get('IN_CONTAINER_USE', '').strip()
@@ -112,7 +113,8 @@ jobs:
           # Preserve provenance fields from any existing manifest.
           mpath = pathlib.Path('.github/labview-ci.yml')
           prev = {'activities': [], 'installedVersion': '', 'repo': '', 'ref': 'main',
-                  'container_use': '', 'vipc': [], 'actions': {}, 'triggers': {}, 'viBrowser': {}, 'unitTests_block': []}
+                  'container_use': '', 'vipc': [], 'actions': {}, 'triggers': {}, 'viBrowser': {}, 'unitTests_block': [],
+                  'labviewVersion': '', 'os': [], 'maxParallel': None}
           if mpath.exists():
               in_acts = False; in_container = False; in_vipc = False; in_actions = False; in_triggers = False; in_vibrowser = False; in_ut = False; cur_vipc = None
               for line in mpath.read_text(encoding='utf-8').splitlines():
@@ -163,12 +165,22 @@ jobs:
                   if m and not prev['repo']: prev['repo'] = m.group(1)
                   m = re.match(r'^\s*ref:\s*(\S+)', line)
                   if m and prev['ref'] == 'main': prev['ref'] = m.group(1)
+                  m = re.match(r'^\s{2}labviewVersion:\s*"?([^"\s]+)"?', line)
+                  if m: prev['labviewVersion'] = m.group(1)
+                  m = re.match(r'^\s{2}os:\s*\[([^\]]*)\]', line)
+                  if m: prev['os'] = [x.strip() for x in m.group(1).split(',') if x.strip()]
+                  m = re.match(r'^\s{4}maxParallel:\s*(\d+)', line)
+                  if m: prev['maxParallel'] = int(m.group(1))
 
-          os_list = ['windows', 'linux'] if oss == 'both' else [oss]
+          # version / os / runners: explicit input wins; blank or "keep" preserves
+          # whatever the manifest had (so a focused editor can change one thing).
+          ver = ver_in or prev.get('labviewVersion') or '2026'
+          os_list = (prev['os'] or ['windows', 'linux']) if oss in ('', 'keep') \
+              else (['windows', 'linux'] if oss == 'both' else [oss])
           acts = [a.strip() for a in acts_in.split(',') if a.strip()] \
               or prev['activities'] or ['dashboard', 'masscompile', 'vi-analyzer', 'vidiff']
           now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-          max_parallel = int(runners) if runners.isdigit() and int(runners) > 0 else 1
+          max_parallel = int(runners) if runners.isdigit() and int(runners) > 0 else (prev.get('maxParallel') or 5)
 
           # Container: explicit input wins; blank keeps whatever the manifest had.
           container_use = container_use_in or prev['container_use'] or 'latest'
@@ -266,9 +278,14 @@ jobs:
                       rules.append({'config': cfg, 'paths': pl})
               return rules
           prev_via = _parse_via_block(mpath.read_text(encoding='utf-8')) if mpath.exists() else {'default': '', 'rules': []}
-          if via_default_in or via_rules_in:
-              via_default = via_default_in or prev_via.get('default') or 'builtin'
-              via_rules = _parse_via_rules(via_rules_in) if via_rules_in else prev_via.get('rules', [])
+          if via_default_in:
+              # A dedicated VI Analyzer editor sends the full state: the default is
+              # authoritative and rules are taken as provided (empty = no rules).
+              via_default = via_default_in
+              via_rules = _parse_via_rules(via_rules_in)
+          elif via_rules_in:
+              via_default = prev_via.get('default') or 'builtin'
+              via_rules = _parse_via_rules(via_rules_in)
           else:
               via_default = prev_via.get('default', '')
               via_rules = prev_via.get('rules', [])
@@ -332,15 +349,25 @@ jobs:
           mpath.write_text('\n'.join(lines), encoding='utf-8')
           print('Wrote', mpath)
 
+          # Hand the resolved LabVIEW version to the VIPC-regen step (the input may
+          # have been blank = keep current).
+          if os.environ.get('GITHUB_ENV'):
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as _f:
+                  _f.write(f'RESOLVED_LV={ver}\n')
+
           # Toggle Antidoc (a VIPM package) in the container dependency manifest.
+          # "keep" (or blank) leaves the current include flag untouched.
           ppath = pathlib.Path('.github/labview/vipm/ci-tooling.packages.json')
-          if ppath.exists():
+          if ppath.exists() and antidoc_in not in ('', 'keep'):
+              antidoc = antidoc_in == 'true'
               obj = json.loads(ppath.read_text(encoding='utf-8'))
               for p in obj.get('vipmPackages', {}).get('packages', []):
                   if p.get('name') == 'wovalab_lib_antidoc_cli':
                       p['include'] = bool(antidoc)
               ppath.write_text(json.dumps(obj, indent=2) + '\n', encoding='utf-8')
               print('Antidoc include ->', antidoc)
+          else:
+              print('Antidoc: keep current')
           PY
 
       - name: Regenerate container VIPC (best effort)
@@ -350,7 +377,7 @@ jobs:
           PKG=.github/labview/vipm/ci-tooling.packages.json
           OUT=.github/labview/vipm/ci-tooling.vipc
           if [ -f "$GEN" ] && [ -f "$PKG" ]; then
-            python3 "$GEN" --manifest "$PKG" --out "$OUT" --labview-version "${{ inputs.labview_version }}"
+            python3 "$GEN" --manifest "$PKG" --out "$OUT" --labview-version "${RESOLVED_LV:-2026}"
           else
             echo "VIPC generator or manifest not present; skipping regeneration."
           fi

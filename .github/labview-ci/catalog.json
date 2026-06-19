@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.11.3",
+  "version": "3.12.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.12.0",
+        "date": "2026-06-19",
+        "title": "VI Analyzer configuration moves to its own page (and only maps configs to code - it never edits test settings)",
+        "summary": "The VI Analyzer setup now has its own dedicated page (opened from the VI Analyzer menu) instead of a tab inside Configure Workers, and its purpose is spelled out: it does NOT change any VI Analyzer test settings. You author those in LabVIEW's VI Analyzer tool (Tools > VI Analyzer > Analyze VIs..., Save Configuration) and commit the resulting .viancfg files; this page only tells the automated pipeline which VIs get analyzed, which committed .viancfg applies to a specific VI or folder, and which .viancfg (if any) is the default when nothing else matches. Applying a change runs the Reconfigure workflow, which now updates ONLY the VI Analyzer settings and preserves every other setting (LabVIEW version, OS, runners, Antidoc, activities, container, triggers) - so the focused page can't accidentally change anything else.",
+        "highlights": [
+          "VI Analyzer configuration is now a dedicated page, not a tab in Configure Workers.",
+          "Clear framing: test settings are authored in LabVIEW's VI Analyzer tool and committed as .viancfg; this page only assigns them to code and chooses which VIs run.",
+          "The Reconfigure workflow now does partial updates - changing just the VI Analyzer mapping leaves LabVIEW version, OS, runners, Antidoc and the rest untouched."
+        ]
+      },
       {
         "version": "3.11.3",
         "date": "2026-06-19",
