@@ -46,7 +46,7 @@ jobs:
       # automatically. Defaults to v1 when the config omits a ref.
       tooling-ref:     ${{ steps.ref.outputs.ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: cfg
         # Full repo path (not ./actions/...): inside a reusable workflow a ./ path
         # resolves against the CALLER's checked-out workspace, which doesn't contain
@@ -70,7 +70,7 @@ jobs:
       statuses: write     # post the CI / Mass Compile commit status
     steps:
       - name: Checkout caller repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -97,7 +97,7 @@ jobs:
       # (config source.ref), checked out at runtime, so the capability never
       # changes version automatically — only when the config is updated.
       - name: Check out tooling (opted-in version)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: elijah286/LabVIEW-CI-with-Containers
           ref: ${{ needs.config.outputs.tooling-ref }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: masscompile-report
           path: ci-out/masscompile/
@@ -130,7 +130,7 @@ jobs:
 
       - name: Deploy report to GitHub Pages
         if: steps.compile.outputs.report-exists == 'true'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ci-out/masscompile
@@ -204,7 +204,7 @@ jobs:
             -d "{\"state\":\"pending\",\"target_url\":\"https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"description\":\"VI Analyzer in progress\",\"context\":\"CI / VI Analyzer\"}"
 
       - name: Checkout caller repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -217,7 +217,7 @@ jobs:
           docker version
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -230,7 +230,7 @@ jobs:
         continue-on-error: true
 
       - name: Check out tooling (opted-in version)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: elijah286/LabVIEW-CI-with-Containers
           ref: ${{ needs.config.outputs.tooling-ref }}
@@ -249,7 +249,7 @@ jobs:
 
       - name: Upload report artifact
         if: steps.analyze.outputs.report-exists == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: vi-analyzer-report-${{ github.sha }}
           path: ci-out/vi-analyzer/
@@ -264,7 +264,7 @@ jobs:
 
       - name: Deploy report to GitHub Pages
         if: steps.analyze.outputs.report-exists == 'true'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ci-out/vi-analyzer
@@ -348,14 +348,14 @@ jobs:
             -d "{\"state\":\"pending\",\"target_url\":\"https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"description\":\"VIDiff in progress\",\"context\":\"CI / VIDiff\"}"
 
       - name: Checkout head commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ steps.shas.outputs.head }}
           fetch-depth: 0
           path: head
 
       - name: Checkout base commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         if: steps.shas.outputs.base != ''
         with:
           ref: ${{ steps.shas.outputs.base }}
@@ -382,7 +382,7 @@ jobs:
           docker version
 
       - name: Check out tooling (opted-in version)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: elijah286/LabVIEW-CI-with-Containers
           ref: ${{ needs.config.outputs.tooling-ref }}
@@ -408,7 +408,7 @@ jobs:
 
       - name: Deploy VIDiff report to GitHub Pages
         if: steps.diff.outputs.report-exists == 'true'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: head/ci-out/vidiff
@@ -450,12 +450,12 @@ jobs:
       statuses: write
     steps:
       - name: Checkout caller repository (full history)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Checkout deployed gallery (gh-pages) for incremental seeding
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         continue-on-error: true
         with:
           ref: gh-pages
@@ -491,7 +491,7 @@ jobs:
             -d "{\"state\":\"pending\",\"target_url\":\"https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\",\"description\":\"VI Snapshots in progress\",\"context\":\"CI / VI Snapshots\"}"
 
       - name: Check out tooling (opted-in version)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: elijah286/LabVIEW-CI-with-Containers
           ref: ${{ needs.config.outputs.tooling-ref }}
@@ -509,7 +509,7 @@ jobs:
 
       - name: Deploy snapshots to GitHub Pages
         if: steps.snap.outputs.gallery-ok == 'true'
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ci-out/vi-snapshots

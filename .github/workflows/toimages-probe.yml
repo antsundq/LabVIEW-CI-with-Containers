@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Ensure Docker daemon is running
         shell: powershell
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload probe JSON
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: toimages-probe-out
           path: _probe-out/
