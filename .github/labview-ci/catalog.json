@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.8.1",
+  "version": "3.8.2",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.8.2",
+        "date": "2026-06-19",
+        "title": "FAQ explains the worker-container lifecycle and how to change it",
+        "summary": "A new FAQ entry makes the container lifecycle explicit: a fresh container is created for each action, each revision, and each platform (docker run --rm) and destroyed the moment that action finishes - it is not created per file, and it is never reused across actions or across revisions, which keeps every run clean and reproducible. It also calls out the one exception (the VI Browser snapshot renderer keeps a single warm container per job and renders each unique VI once ever by content hash) and lists the settings you can change: which image each container runs (Container tab and per-action routing), when the image rebuilds (baked VIPC files plus Monitor), where containers run (self-hosted runners keep a Docker layer cache between jobs), and how many spin up at once (max concurrent runners) or at all (enable/disable capabilities, Windows/Linux).",
+        "highlights": [
+          "Clarifies that each action, each revision, and each platform gets its own fresh container (docker run --rm): one container processes every VI in a revision, but containers are never shared across actions or across revisions.",
+          "Documents the one exception - the VI Browser snapshot renderer keeps a single warm container per job and renders each unique VI exactly once ever by content hash.",
+          "Lists the related settings users can change: container image selection and per-action routing, image rebuild triggers (Monitor), self-hosted runners, and concurrency limits."
+        ]
+      },
       {
         "version": "3.8.1",
         "date": "2026-06-19",
