@@ -177,7 +177,6 @@
       <button class="tab" id="tab-container" role="tab" data-pane="pane-container">Container &amp; Dependencies</button>
       <button class="tab" id="tab-routing" role="tab" data-pane="pane-routing">Action Routing</button>
       <button class="tab" id="tab-vibrowser" role="tab" data-pane="pane-vibrowser">VI Browser</button>
-      <button class="tab" id="tab-vianalyzer" role="tab" data-pane="pane-vianalyzer">VI Analyzer</button>
       <button class="tab" id="tab-review" role="tab" data-pane="pane-review">Review &amp; Apply</button>
     </nav>
 
@@ -302,38 +301,6 @@
         <p class="hint" style="margin-top:10px"><strong>2.0 on Windows</strong> is the recommended path. It rides the existing Windows snapshots run and emits position-aware frames when the <code class="inl">PrintToImagesJson</code> operation is present beside <code class="inl">PrintToSingleFileHtml</code> (see <code class="inl">.github/labview/toimages/README.md</code>). <strong>2.0 on Linux</strong> uses the toimages render image and is kept available, but has known display bugs when capturing diagram pictures. <strong>1.0</strong> runs on Windows only.</p>
       </section>
     </div><!-- /pane-vibrowser -->
-
-    <!-- ========================= VI ANALYZER ============================ -->
-    <div class="tabpane" id="pane-vianalyzer" role="tabpanel" aria-labelledby="tab-vianalyzer" hidden>
-      <section>
-        <h2>VI Analyzer configuration
-          <span class="infowrap">
-            <button type="button" class="infobtn" aria-expanded="false" aria-label="About VI Analyzer configuration">i</button>
-            <span class="infopop" hidden role="note">VI Analyzer test settings are saved by LabVIEW in a <code class="inl">.viancfg</code> file (Tools &rsaquo; VI Analyzer &rsaquo; Analyze VIs&hellip;, choose the tests and exclusions, then <strong>Save Configuration</strong>). Commit those files to your repository and pick which one applies to which code below. With no <code class="inl">.viancfg</code> present, CI runs the full built-in VI Analyzer test suite over every VI; when one is present, the pipeline uses it.</span>
-          </span>
-        </h2>
-        <p class="hint">Choose which VI Analyzer <strong>test configuration</strong> runs on which code. Saved to <code class="inl">config.viAnalyzer</code> in <code class="inl">.github/labview-ci.yml</code>; the VI Analyzer workflow reads it at run time. Each configuration is a LabVIEW <code class="inl">.viancfg</code> file committed to the repository.</p>
-        <div id="viaOffNote" class="note hint" style="margin:0 0 12px" hidden>VI Analyzer is currently turned off in the <strong>Pipeline</strong> tab &mdash; turn it on there for these settings to take effect.</div>
-        <div id="viaConfigNote" class="hint" style="margin:0 0 14px"></div>
-
-        <div class="subhead">Default configuration</div>
-        <p class="hint" style="margin:-2px 0 8px">Applied to every VI that isn't matched by a rule below. The <strong>built-in full suite</strong> runs all default VI Analyzer tests; pick a committed <code class="inl">.viancfg</code> to use its tests instead, or choose <strong>don't test by default</strong> so only files matched by a rule are analyzed.</p>
-        <div class="field" style="max-width:560px">
-          <label class="fl" for="viaDefault">Default test configuration</label>
-          <select id="viaDefault"></select>
-        </div>
-
-        <section style="margin-top:18px">
-          <div class="subhead">Per-folder &amp; per-file configurations</div>
-          <p class="hint" style="margin:-2px 0 10px">Assign a specific <code class="inl">.viancfg</code> to a subset of your code &mdash; choose individual VIs and/or whole folders. Files matched by a rule are tested with that configuration <em>instead of</em> the default. Choose <strong>Exclude</strong> to skip the selected files entirely (some VIs not being tested is fine). When a file matches more than one rule, the first rule listed wins.</p>
-          <div id="viaRules"></div>
-          <div class="addpkg" style="margin-top:6px">
-            <button class="ghost" id="viaAddRule" type="button">+ Add a configuration rule</button>
-          </div>
-          <datalist id="viaPathSuggest"></datalist>
-        </section>
-      </section>
-    </div><!-- /pane-vianalyzer -->
 
     <!-- ========================= REVIEW & APPLY ========================= -->
     <div class="tabpane" id="pane-review" role="tabpanel" aria-labelledby="tab-review" hidden>
@@ -1022,9 +989,8 @@
           else if (t.type === "blob" && /\.(vi|ctl|lvclass|lvlib)$/i.test(t.path)) vis.push(t.path);
         });
         viaPathSuggest = folders.sort().concat(vis.sort());
-        // No saved config and the user hasn't picked one yet -> default to the first
-        // committed .viancfg if any (the pipeline's own auto-detection), else builtin.
-        if (!viaDefaultTouched && !viaDefault) viaDefault = viaConfigs[0] || "builtin";
+        // VI Analyzer mapping is edited on its own page (vi-analyzer.html); here we
+        // keep the saved config as-is so applying other settings never changes it.
         renderViAnalyzer();
         update();
       } catch (_) {}
@@ -1124,12 +1090,10 @@
         document.querySelectorAll(".tabpane").forEach(p => { p.hidden = (p.id !== t.dataset.pane); });
         if (t.dataset.pane === "pane-routing") renderActionRouting();
         if (t.dataset.pane === "pane-vibrowser") renderViBrowser();
-        if (t.dataset.pane === "pane-vianalyzer") renderViAnalyzer();
       }));
       // Deep-link: open a specific tab from the URL hash (e.g. the header's
       // "VI Browser" menu links to configure.html#vi-browser).
       const hashTab = { "#vi-browser": "tab-vibrowser", "#vibrowser": "tab-vibrowser",
-        "#vi-analyzer": "tab-vianalyzer", "#vianalyzer": "tab-vianalyzer",
         "#routing": "tab-routing", "#container": "tab-container",
         "#pipeline": "tab-pipeline", "#review": "tab-review" };
       const want = hashTab[String(location.hash || "").toLowerCase()];
@@ -1276,11 +1240,6 @@
         // Manually added paths are an explicit choice, so include them by default.
         if (!vipcList.some(v => v.path === p)) vipcList.push({ path: p, monitor: true, include: true });
         $("newVipcPath").value = ""; renderVipcs(); update();
-      });
-      $("viaDefault").addEventListener("change", () => { viaDefault = $("viaDefault").value; viaDefaultTouched = true; update(); });
-      $("viaAddRule").addEventListener("click", () => {
-        viaRules.push({ config: viaConfigs[0] || "none", paths: [] });
-        renderViaRules(); update();
       });
     }
     function flash(msg) { const st = $("dlStatus"); st.className = "status ok"; st.textContent = msg; }
