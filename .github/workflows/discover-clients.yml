@@ -27,7 +27,7 @@ jobs:
     if: github.repository == 'elijah286/LabVIEW-CI-with-Containers'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Discover client repositories
         env:
@@ -41,7 +41,7 @@ jobs:
         run: python3 .github/scripts/discover-clients.py
 
       - name: Deploy clients.json to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v4.1.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ci-out/clients

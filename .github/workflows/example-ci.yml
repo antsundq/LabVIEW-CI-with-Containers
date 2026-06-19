@@ -24,7 +24,7 @@ jobs:
       os-windows:      ${{ steps.cfg.outputs.os-windows }}
       labview-version: ${{ steps.cfg.outputs.labview-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: cfg
         uses: ./actions/load-config
         with:
@@ -35,12 +35,12 @@ jobs:
     if: ${{ needs.config.outputs.has-masscompile == 'true' && needs.config.outputs.os-windows == 'true' }}
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Mass Compile the example project
         uses: ./actions/masscompile
         with:
           labview-version: ${{ needs.config.outputs.labview-version }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: example-masscompile
