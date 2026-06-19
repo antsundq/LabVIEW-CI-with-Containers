@@ -60,18 +60,30 @@ RUN if (-not (Get-Command nipkg -ErrorAction SilentlyContinue)) { throw 'nipkg w
 # Install the NI Unit Test Framework (UTF) so the headless unit-test runner can
 # execute the project's .lvtest files (run-unit-tests.ps1 drives the built-in
 # 'LabVIEWCLI -OperationName RunUnitTests' operation that ships with the LabVIEW
-# command line interface). UTF is
-# an NI add-on (not on VIPM); it installs from the same NI Package Manager feed as the
-# VI Analyzer support package above. The package is PINNED by name - ni-utf-labview-support,
-# the UTF analog of ni-viawin-labview-support - exactly like the VI Analyzer install. A
-# UTF_PACKAGE build-arg overrides the name for other feeds, and if the pinned install
-# fails the build falls back to discovering a unit-test-framework / utf-labview-support
-# package on the feed. This step is BEST-EFFORT and never fails the build: if UTF cannot
-# be installed it emits a ::warning:: and the unit-test runner degrades gracefully (it
-# reports "no tests found" without UTF).
+# command line interface). UTF is an NI add-on (not on VIPM). It is installed from
+# its OWN dedicated NI Package Manager feed (ni-labview-unit-test-framework-toolkit),
+# added here in addition to the base feed above, plus the matching released-critical
+# channel. The package is PINNED by name - ni-utf-labview-support, the UTF analog of
+# ni-viawin-labview-support. A UTF_PACKAGE build-arg overrides the name, and if the
+# pinned install fails the build falls back to discovering a unit-test-framework /
+# utf-labview-support package on the feeds. This step is BEST-EFFORT and never fails
+# the build: if UTF cannot be installed it emits a ::warning:: and the unit-test
+# runner degrades gracefully (it reports "no tests found" and the report shows the
+# "container is missing this tooling" banner).
+ARG UTF_FEED_NAME=LVUTF
+ARG UTF_FEED_URL=https://download.ni.com/support/nipkg/products/ni-l/ni-labview-unit-test-framework-toolkit/25.1/released
+ARG UTF_FEED_CRITICAL_NAME=LVUTFcritical
+ARG UTF_FEED_CRITICAL_URL=https://download.ni.com/support/nipkg/products/ni-l/ni-labview-unit-test-framework-toolkit/25.1/released-critical
 ARG UTF_SUPPORT_PACKAGE=ni-utf-labview-support
 ARG UTF_PACKAGE=
 RUN $ErrorActionPreference = 'Continue'; `
+    Write-Host "Adding NI Unit Test Framework toolkit feed: $env:UTF_FEED_URL"; `
+    nipkg feed-add --name=$env:UTF_FEED_NAME $env:UTF_FEED_URL; `
+    if ($env:UTF_FEED_CRITICAL_URL) { `
+      Write-Host "Adding NI Unit Test Framework toolkit feed (critical): $env:UTF_FEED_CRITICAL_URL"; `
+      nipkg feed-add --name=$env:UTF_FEED_CRITICAL_NAME $env:UTF_FEED_CRITICAL_URL `
+    }; `
+    nipkg update; `
     $pkg = if ($env:UTF_PACKAGE) { $env:UTF_PACKAGE } else { $env:UTF_SUPPORT_PACKAGE }; `
     Write-Host "Installing NI Unit Test Framework package: $pkg"; `
     nipkg install --accept-eulas -y $pkg; `
