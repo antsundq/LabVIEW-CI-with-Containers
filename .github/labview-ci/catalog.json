@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.12.1",
+  "version": "3.12.2",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.12.2",
+        "date": "2026-06-19",
+        "title": "Unit-test runner dumps the LabVIEW add-on manifests to diagnose UTF on LabVIEW 2026",
+        "summary": "Container diagnostics confirmed the NI Unit Test Framework toolkit is deployed into LabVIEW's version-independent add-ons folder (C:\\Program Files\\NI\\LVAddons\\utf64), yet RunUnitTests still cannot load it. LabVIEW only loads an add-on whose lvaddoninfo.json manifest declares compatibility with the running LabVIEW. The runner now prints the UTF manifests alongside the VI Analyzer manifest (which does load on 2026) so the exact version gating is visible. Diagnostic-only, runner-side, no image rebuild.",
+        "highlights": [
+          "Confirms the UTF toolkit is present in the version-independent add-ons folder, so the issue is add-on load compatibility, not a missing install.",
+          "Prints the add-on lvaddoninfo.json manifests (UTF vs VI Analyzer) to pinpoint the LabVIEW-version gating.",
+          "Diagnostic-only: no image rebuild and no change to how tests run."
+        ]
+      },
       {
         "version": "3.12.1",
         "date": "2026-06-19",
