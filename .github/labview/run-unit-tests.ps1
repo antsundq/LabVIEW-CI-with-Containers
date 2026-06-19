@@ -200,9 +200,11 @@ function Repair-UtfJunitLibrary([string]$LvPath) {
 # FIX (layer 2): utf junit report.lvlib:create junit report.vi depends on NI's
 # "JUnit Results API" (JUnit API.lvlib) at "<vilib>:\ni\JUnit Results API\" (incl.
 # a Controls\ subfolder). That API historically shipped in LabVIEW vi.lib but is
-# absent from this LabVIEW 2026 per-version vi.lib, so create junit report.vi still
-# loads broken. Locate the JUnit Results API wherever it landed (e.g. inside the UTF
-# add-on under LVAddons) and mirror the whole library folder into vi.lib.
+# absent from this LabVIEW 2026 image (neither the base install nor the UTF add-on
+# places it there), so create junit report.vi still loads broken. Mirror the
+# vendored library (.github/labview/junit-results-api) into vi.lib, preserving the
+# Controls\ subfolder so the library's ../Controls/*.ctl member URLs resolve. Falls
+# back to any copy already present on the container. Idempotent + best-effort.
 function Repair-JUnitResultsApi([string]$LvPath) {
     Write-Host '===== NI JUnit Results API repair ====='
     $lvRoot = if ($LvPath) { Split-Path -Parent $LvPath } else { '' }
@@ -213,25 +215,43 @@ function Repair-JUnitResultsApi([string]$LvPath) {
         Write-Host '===== end repair ====='
         return
     }
+    # Source: prefer the library vendored in the repo; the UTF toolkit does NOT ship
+    # this API on LabVIEW 2026, so it must be supplied. Fall back to any copy already
+    # present on the container.
     $src = $null
-    foreach ($r in @('C:\Program Files\NI\LVAddons',
-                     'C:\Program Files\National Instruments',
-                     'C:\Program Files (x86)\National Instruments')) {
-        if (-not (Test-Path -LiteralPath $r)) { continue }
-        $hit = Get-ChildItem -LiteralPath $r -Recurse -File -Filter 'Create JUnit Root.vi' -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($hit) { $src = Split-Path -Parent $hit.FullName; break }
+    $vendored = Join-Path $WorkspaceRoot '.github\labview\junit-results-api'
+    if (Test-Path -LiteralPath (Join-Path $vendored 'Create JUnit Root.vi')) {
+        $src = $vendored
+    } else {
+        foreach ($r in @('C:\Program Files\NI\LVAddons',
+                         'C:\Program Files\National Instruments',
+                         'C:\Program Files (x86)\National Instruments')) {
+            if (-not (Test-Path -LiteralPath $r)) { continue }
+            $hit = Get-ChildItem -LiteralPath $r -Recurse -File -Filter 'Create JUnit Root.vi' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($hit) { $src = Split-Path -Parent $hit.FullName; break }
+        }
     }
     if (-not $src) {
-        Write-Host "  'Create JUnit Root.vi' NOT FOUND on container; JUnit Results API must be vendored."
+        Write-Host "  'Create JUnit Root.vi' NOT FOUND (no vendored copy, none on container); cannot repair."
         Write-Host '===== end repair ====='
         return
     }
     Write-Host "  source JUnit Results API: $src"
     try {
         New-Item -ItemType Directory -Force -Path $target | Out-Null
-        Copy-Item -LiteralPath (Join-Path $src '*') -Destination $target -Recurse -Force -ErrorAction Stop
-        Write-Host "  mirrored -> $target"
+        New-Item -ItemType Directory -Force -Path (Join-Path $target 'Controls') | Out-Null
+        # library VIs + .lvlib at the root (skip docs); ctls into Controls\
+        Get-ChildItem -LiteralPath $src -File -ErrorAction Stop |
+            Where-Object { $_.Extension -match '(?i)^\.(vi|lvlib)$' } |
+            ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $target -Force }
+        $ctlDir = Join-Path $src 'Controls'
+        if (Test-Path -LiteralPath $ctlDir) {
+            Get-ChildItem -LiteralPath $ctlDir -File -ErrorAction Stop |
+                Where-Object { $_.Extension -match '(?i)^\.ctl$' } |
+                ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $target 'Controls') -Force }
+        }
+        Write-Host "  mirrored library files -> $target"
     } catch {
         Write-Host "  (copy failed: $($_.Exception.Message))"
     }
