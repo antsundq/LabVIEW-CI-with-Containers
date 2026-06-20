@@ -142,7 +142,7 @@ ARG GIT_INSTALLER_URL=https://github.com/git-for-windows/git/releases/download/v
 RUN $ErrorActionPreference = 'Continue'; `
     $gitZip = Join-Path $env:TEMP 'mingit.zip'; `
     try { `
-      Write-Host "Downloading portable Git (MinGit): $env:GIT_INSTALLER_URL"; `
+      Write-Host "Downloading portable Git MinGit from $env:GIT_INSTALLER_URL"; `
       Invoke-WebRequest -Uri $env:GIT_INSTALLER_URL -OutFile $gitZip -UseBasicParsing; `
       Write-Host ('Downloaded {0:N1} MB; extracting to C:\git ...' -f ((Get-Item $gitZip).Length / 1MB)); `
       Expand-Archive -Path $gitZip -DestinationPath 'C:\git' -Force; `
@@ -151,7 +151,7 @@ RUN $ErrorActionPreference = 'Continue'; `
       $env:Path = 'C:\git\cmd;' + $env:Path; `
       Write-Host ('Installed portable Git: ' + (& 'C:\git\cmd\git.exe' --version)) `
     } catch { `
-      Write-Host "::warning::Portable Git install failed ($($_.Exception.Message)); VIPM Community Edition cannot verify repository visibility, so VIPM add-ons (including the UTF JUnit Report library) will not be baked in." `
+      Write-Host ('::warning::Portable Git install failed: ' + $_.Exception.Message + ' VIPM Community Edition cannot verify repository visibility, so the VIPM add-ons including the UTF JUnit Report library will not be baked in.') `
     } finally { `
       Remove-Item $gitZip -Force -ErrorAction SilentlyContinue `
     }
