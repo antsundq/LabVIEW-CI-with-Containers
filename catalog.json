@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.24.6",
+  "version": "3.25.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.25.0",
+        "date": "2026-06-20",
+        "title": "Jump from a report straight to the VI Browser for the same revision",
+        "summary": "The Activity picker on a report now lists Snapshots alongside the other checks, so from any report -- Mass Compile, VI Analyzer, Unit Tests, Antidoc -- you can open the VI Browser for the SAME revision in one step, without going back to the dashboard. The picker now spans a revision's whole activity set (its VI snapshots plus every report), the first half of one unified switcher that will also appear inside the VI Browser in a later step. Reports that were not produced for the revision stay greyed out; Snapshots is always available.",
+        "highlights": [
+          "The report Activity picker now includes Snapshots, opening the VI Browser for the current revision in one step.",
+          "It now covers a revision's full activity set -- VI snapshots plus every report -- not just the reports.",
+          "Reports missing for the revision stay disabled; Snapshots is always offered."
+        ]
+      },
       {
         "version": "3.24.6",
         "date": "2026-06-21",
