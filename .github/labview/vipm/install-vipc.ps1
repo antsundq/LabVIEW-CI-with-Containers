@@ -58,6 +58,17 @@ $Env:NO_COLOR               = '1'
 # See docs.vipm.io/latest/cli/environment-variables.
 $Env:VIPM_TIMEOUT           = if ($Env:VIPM_TIMEOUT) { $Env:VIPM_TIMEOUT } else { '900' }
 
+# VIPM 26.3 Community Edition shells out to a real `git` binary to verify that the
+# working directory is a PUBLIC Git repository (see New-PublicRepoWorkdir below). The
+# Windows base image has no git on PATH; labview-ci.Dockerfile bakes portable MinGit
+# into C:\git, so make sure git is discoverable by vipm's child process. Without this
+# vipm fails with "Cannot determine repository visibility: ... git: program not found".
+foreach ($gitDir in @('C:\git\cmd', 'C:\Program Files\Git\cmd')) {
+    if ((Test-Path (Join-Path $gitDir 'git.exe')) -and ($Env:Path -notlike "*$gitDir*")) {
+        $Env:Path = "$gitDir;$Env:Path"
+    }
+}
+
 # -- 1. Install VIPM if not already present -----------------------------------
 # VIPM is normally pre-installed into the image by labview-ci.Dockerfile, which
 # downloads the official VIPM 2026 Q3 (26.3.3954) Windows installer from the JKI

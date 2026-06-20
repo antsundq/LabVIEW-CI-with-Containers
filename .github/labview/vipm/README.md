@@ -89,15 +89,26 @@ Professional for use outside of public repositories: https://vipm.io/pro
 ```
 
 During `docker build` the installs run from `C:\vipm` (just the copied scripts),
-which is **not** a Git repo — so they were all blocked. We discovered (verified
-locally against VIPM 26.3) that VIPM only reads **`.git/config`'s `origin` URL**
-and checks that the repo is public; it needs **no git binary, no clone, and no
-commits**. So `install-vipc.ps1` fabricates a minimal `.git` (a `HEAD` plus a
-`config` whose `origin` points at this public worker repo), `cd`s into it, runs
-the installs, and deletes it afterward. The repo URL comes from the
-`VIPM_PUBLIC_REPO_URL` build-arg / env var (the build workflow passes the actual
-building repo via `${{ github.server_url }}/${{ github.repository }}.git`, so a
-fork uses its own public repo); it defaults to this repo.
+which is **not** a Git repo — so they were all blocked. VIPM determines the
+repository and its visibility by **shelling out to a real `git` binary** (it runs
+`git` to read `.git/config`'s `origin` URL and to confirm the repo is public). It
+needs **no clone and no commits**, but it _does_ need a git executable on `PATH`
+— without one it fails with a second flavour of exit `6`:
+
+```
+error: Cannot determine repository visibility: failed to execute
+git: program not found
+```
+
+The Windows base image ships **no git**, so the Dockerfile bakes in portable
+**MinGit** (`GIT_INSTALLER_URL`, the official git-for-windows redistributable) at
+`C:\git` and prepends `C:\git\cmd` to the machine `PATH`. `install-vipc.ps1` then
+fabricates a minimal `.git` (a `HEAD` plus a `config` whose `origin` points at this
+public worker repo), `cd`s into it, runs the installs, and deletes it afterward.
+The repo URL comes from the `VIPM_PUBLIC_REPO_URL` build-arg / env var (the build
+workflow passes the actual building repo via
+`${{ github.server_url }}/${{ github.repository }}.git`, so a fork uses its own
+public repo); it defaults to this repo.
 
 Minimal `.git` that satisfies the check:
 
@@ -183,6 +194,7 @@ changed shape vs. the older `2026.1.0` build — mind the differences:**
 | `VIPM_ASSUME_YES` | `1` | Auto-confirm. |
 | `VIPM_TIMEOUT` | `900` | Override the per-operation timeout (seconds). |
 | `VIPM_PUBLIC_REPO_URL` | this repo's clone URL | Public Git repo `origin` used to satisfy Community Edition's public-repo requirement. |
+| `GIT_INSTALLER_URL` | MinGit 2.54.0 64-bit zip | Portable git-for-windows build baked into the image so VIPM can run `git` to verify repository visibility. |
 | `NO_COLOR` | `1` | Strip ANSI color from logs. |
 | `LABVIEW_VERSION` | `2026` | Target LabVIEW year for `--labview-version`. |
 | `LABVIEW_BITNESS` | `64` | Target LabVIEW bitness for `--labview-bitness`. |
@@ -196,6 +208,7 @@ changed shape vs. the older `2026.1.0` build — mind the differences:**
 | --- | --- |
 | `LabVIEW CLI error -350053` during RunUnitTests | UTF JUnit Report library not baked in — VIPM install was skipped or failed. Check this hook's log. |
 | `VIPM Community Edition requires a public Git repository` (exit 6) | The install ran outside a public Git repo. The script runs installs from a fabricated `.git` whose `origin` is `VIPM_PUBLIC_REPO_URL`; make sure that points at a real **public** repo. |
+| `Cannot determine repository visibility: … git: program not found` (exit 6) | No git binary on `PATH`. VIPM shells out to `git` to verify the repo is public. The Dockerfile bakes portable MinGit into `C:\git`; check the "Downloading portable Git" step succeeded (`GIT_INSTALLER_URL`). |
 | `IO error: Failed to load …Settings.ini … (os error 2)` | VIPM `Settings.ini` missing — the script's seed step didn't run (no LabVIEW found?). |
 | `Operation 'VIPM command 'library_list'' timed out after 330s` | Short build-time timeout and/or an old CLI. Use VIPM 26.3+ and raise `VIPM_TIMEOUT`. |
 | `error: unexpected argument '--refresh' found` (exit 2) | 26.3 removed `--refresh` from `install`. Run the standalone `vipm refresh` first; don't pass `--refresh` to `install`. |

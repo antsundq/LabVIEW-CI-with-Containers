@@ -129,6 +129,33 @@ RUN $ErrorActionPreference = 'Continue'; `
       Remove-Item $vipmSetup -Force -ErrorAction SilentlyContinue `
     }
 
+# Install portable Git (MinGit) so VIPM can verify repository visibility.
+# VIPM 26.3 Community Edition shells out to a real `git` binary to confirm that the
+# current working directory is a PUBLIC Git repository before it installs anything.
+# The Windows base image has no git on PATH, so VIPM otherwise fails with
+# "error: Cannot determine repository visibility: failed to execute git: program not
+# found" (exit 6) and no add-ons are baked in. MinGit is the official lightweight,
+# redistributable git-for-windows build; we unzip it to C:\git and prepend C:\git\cmd
+# to the machine PATH so VIPM (and install-vipc.ps1) can find it.
+# BEST-EFFORT: a failure only means the VIPM add-ons (UTF JUnit Report) are absent.
+ARG GIT_INSTALLER_URL=https://github.com/git-for-windows/git/releases/download/v2.54.0.windows.1/MinGit-2.54.0-64-bit.zip
+RUN $ErrorActionPreference = 'Continue'; `
+    $gitZip = Join-Path $env:TEMP 'mingit.zip'; `
+    try { `
+      Write-Host "Downloading portable Git (MinGit): $env:GIT_INSTALLER_URL"; `
+      Invoke-WebRequest -Uri $env:GIT_INSTALLER_URL -OutFile $gitZip -UseBasicParsing; `
+      Write-Host ('Downloaded {0:N1} MB; extracting to C:\git ...' -f ((Get-Item $gitZip).Length / 1MB)); `
+      Expand-Archive -Path $gitZip -DestinationPath 'C:\git' -Force; `
+      $machinePath = [Environment]::GetEnvironmentVariable('Path','Machine'); `
+      if ($machinePath -notlike '*C:\git\cmd*') { [Environment]::SetEnvironmentVariable('Path', 'C:\git\cmd;' + $machinePath, 'Machine') }; `
+      $env:Path = 'C:\git\cmd;' + $env:Path; `
+      Write-Host ('Installed portable Git: ' + (& 'C:\git\cmd\git.exe' --version)) `
+    } catch { `
+      Write-Host "::warning::Portable Git install failed ($($_.Exception.Message)); VIPM Community Edition cannot verify repository visibility, so VIPM add-ons (including the UTF JUnit Report library) will not be baked in." `
+    } finally { `
+      Remove-Item $gitZip -Force -ErrorAction SilentlyContinue `
+    }
+
 # Optional VIPC support hook. If .vipc files exist, an installer script must be
 # present so dependencies are handled explicitly.
 # VIPM 26.3 Community Edition only installs when the working dir is inside a PUBLIC
