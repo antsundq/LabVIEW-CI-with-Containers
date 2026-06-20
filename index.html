@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="60">
+  <meta http-equiv="refresh" content="900">
   <title>CI Dashboard — LabVIEW-CI-with-Containers</title>
   <style>
     :root{
@@ -48,6 +48,9 @@
     .nav a{margin-right:16px;color:var(--link)}
     .controls{margin:0 0 12px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:var(--fg-muted);font-size:.85em}
     .controls input{margin:0;accent-color:var(--link)}
+    /* When the shared header is present, the controls live in its sticky context
+       bar (moved there on lvci:ready), so drop the standalone margin + fill the bar. */
+    .lvci-ctxbar .controls{margin:0;flex:1 1 auto}
     .cidash-check{display:inline-flex;align-items:center;gap:6px}
     /* Search box + status filter (compose with the CI-only toggle below). */
     .cidash-search{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 10px}
@@ -1311,7 +1314,7 @@
   </script>
   <main class="lvci-main">
   <h1>CI Dashboard — LabVIEW-CI-with-Containers</h1>
-  <div class="sub">Last updated: 2026-06-20 04:54 UTC &nbsp;|&nbsp; Live — refreshing every 60 s while CI runs</div>
+  <div class="sub">Last updated: 2026-06-20 05:08 UTC &nbsp;|&nbsp; Auto-refreshes every 15 min</div>
   <div class="nav">
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers">GitHub</a>
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers/actions">Actions</a>
@@ -1351,6 +1354,60 @@
       </tr>
     </thead>
     <tbody>
+    <tr data-project="false">
+      <td class="cidash-rev">
+        <div class="cidash-rev-wrap">
+          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
+          <div class="cidash-rev-body">
+            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2c8f6101fb808ca0b30fbaaa8ec76974bd6b56c8" class="cidash-rev-msg" title="dashboard: move search, filters, and Columns into the shared sticky toolbar (v3.">dashboard: move search, filters, and Columns into the shared sticky toolbar (v3.</a></div>
+            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2c8f6101fb808ca0b30fbaaa8ec76974bd6b56c8" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">2c8f610</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-20</div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+    </tr>
+
+    <tr data-project="false">
+      <td class="cidash-rev">
+        <div class="cidash-rev-wrap">
+          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
+          <div class="cidash-rev-body">
+            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=c542069d037fb2a5c83e0f766b270df0421a699f" class="cidash-rev-msg" title="FAQ: add &quot;where worker containers are stored / run&quot; and &quot;what is an Actions runn">FAQ: add &quot;where worker containers are stored / run&quot; and &quot;what is an Actions runn</a></div>
+            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=c542069d037fb2a5c83e0f766b270df0421a699f" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">c542069</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-20</div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+    </tr>
+
+    <tr data-project="false">
+      <td class="cidash-rev">
+        <div class="cidash-rev-wrap">
+          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
+          <div class="cidash-rev-body">
+            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=35fd075d2de1b515855715fe8516e7113c3bfa8f" class="cidash-rev-msg" title="CI runs now show which revision they check and who requested them (v3.21.0)">CI runs now show which revision they check and who requested them (v3.21.0)</a></div>
+            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=35fd075d2de1b515855715fe8516e7113c3bfa8f" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">35fd075</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-20</div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+    </tr>
+
     <tr data-project="false">
       <td class="cidash-rev">
         <div class="cidash-rev-wrap">
@@ -2352,7 +2409,7 @@
         </div>
       </td>
       <td style="text-align:center"><a href="#" class="cidash-run" data-cap="masscompile" data-sha="12553d67f22d02885acfd455c1d68381e8702aca" data-parent="f4a0d5af8fd7ce5690e0a52af239926b496d0e6d" data-short="12553d6" title="Run Mass Compile for commit 12553d6">&#9655;</a></td>
-      <td style="text-align:center"><span class="run-badge" title="Running — click to view progress"><a href="https://github.com/elijah286/LabVIEW-CI-with-Containers/actions/runs/27860561992" style="color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:5px"><span class="run-spin"></span>analyze</a></span></td>
+      <td style="text-align:center" class="cidash-cap-cell" data-cap="vi-analyzer" data-sha="12553d67f22d02885acfd455c1d68381e8702aca" data-parent="f4a0d5af8fd7ce5690e0a52af239926b496d0e6d" data-short="12553d6" data-ts="2026-06-20T04:59:33Z"><span class="cidash-chip cc-pass"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L1.22 9.28a.75.75 0 1 1 1.06-1.06L6 11.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/report/index.html?type=vi-analyzer-report&sha=12553d67f22d02885acfd455c1d68381e8702aca&short=12553d6&src=..%2Fvi-analyzer%2F12553d67f22d02885acfd455c1d68381e8702aca%2Findex.html&title=VI%20Analyzer%20%C2%B7%2012553d6" style="color:inherit">analyze</a></span></td>
       <td style="text-align:center" class="cidash-cap-cell" data-cap="vidiff" data-sha="12553d67f22d02885acfd455c1d68381e8702aca" data-parent="f4a0d5af8fd7ce5690e0a52af239926b496d0e6d" data-short="12553d6" data-ts="2026-06-19T03:03:17Z"><span class="cidash-chip cc-pass"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L1.22 9.28a.75.75 0 1 1 1.06-1.06L6 11.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=12553d67f22d02885acfd455c1d68381e8702aca&changed=1" style="color:inherit">diff</a></span></td>
       <td style="text-align:center"><span class="cidash-chip cc-info" title="Snapshots rendered for all 45 VIs in this revision"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=12553d67f22d02885acfd455c1d68381e8702aca" style="color:inherit">45</a></span></td>
       <td style="text-align:center" class="cidash-cap-cell" data-cap="unit-tests" data-sha="12553d67f22d02885acfd455c1d68381e8702aca" data-parent="f4a0d5af8fd7ce5690e0a52af239926b496d0e6d" data-short="12553d6" data-ts="2026-06-19T18:05:03Z"><span class="cidash-chip cc-pass"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L1.22 9.28a.75.75 0 1 1 1.06-1.06L6 11.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/report/index.html?type=unit-tests-report&sha=12553d67f22d02885acfd455c1d68381e8702aca&short=12553d6&src=..%2Funit-tests%2F12553d67f22d02885acfd455c1d68381e8702aca%2Findex.html&title=CI%20Report%20%C2%B7%2012553d6" style="color:inherit">tests</a></span></td>
@@ -3097,60 +3154,6 @@
       <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
     </tr>
 
-    <tr data-project="false">
-      <td class="cidash-rev">
-        <div class="cidash-rev-wrap">
-          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
-          <div class="cidash-rev-body">
-            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=e90ca03f48b1b605063b74d30f16bb97b97c2e28" class="cidash-rev-msg" title="Publish the VI Browser 2.0 wizard token-prompt fix as v3.3.1">Publish the VI Browser 2.0 wizard token-prompt fix as v3.3.1</a></div>
-            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=e90ca03f48b1b605063b74d30f16bb97b97c2e28" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">e90ca03</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-18</div>
-          </div>
-        </div>
-      </td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-    </tr>
-
-    <tr data-project="false">
-      <td class="cidash-rev">
-        <div class="cidash-rev-wrap">
-          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
-          <div class="cidash-rev-body">
-            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=4b6f216ce1ff180695d42d89f723c5ea0125c83f" class="cidash-rev-msg" title="VI Browser 2.0 wizard: prompt for a missing token inline instead of dead-ending">VI Browser 2.0 wizard: prompt for a missing token inline instead of dead-ending</a></div>
-            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=4b6f216ce1ff180695d42d89f723c5ea0125c83f" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">4b6f216</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-18</div>
-          </div>
-        </div>
-      </td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-    </tr>
-
-    <tr data-project="false">
-      <td class="cidash-rev">
-        <div class="cidash-rev-wrap">
-          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
-          <div class="cidash-rev-body">
-            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=0043e9ea4e3931db47680cb93fdfd24e44645d5e" class="cidash-rev-msg" title="Clients directory: discover + list repos running this tooling (v3.3.0)">Clients directory: discover + list repos running this tooling (v3.3.0)</a></div>
-            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=0043e9ea4e3931db47680cb93fdfd24e44645d5e" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">0043e9e</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-18</div>
-          </div>
-        </div>
-      </td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-    </tr>
-
     <tr data-project="true">
       <td class="cidash-rev">
         <div class="cidash-rev-wrap">
@@ -3375,6 +3378,25 @@
     No revisions match the current filters. <a href="#" id="cidash-clearf" style="color:var(--link)">Clear filters</a>.
   </div>
   </main>
+  <script>
+    // Relocate the controls (search / status filter / Include CI-only / Columns)
+    // into the shared header's sticky context bar, so they sit in the SAME place
+    // as the revision bar on the report / VI Browser pages and stay visible while
+    // you scroll the table. A DOM move keeps every control's existing listeners;
+    // if the header isn't present the controls simply stay inline (graceful).
+    (function () {
+      function placeControls() {
+        var bar = document.getElementById('lvci-ctxbar');
+        var controls = document.querySelector('.controls');
+        if (bar && controls && controls.parentNode !== bar) {
+          bar.appendChild(controls);
+          controls.classList.add('cidash-in-ctxbar');
+        }
+      }
+      if (window.lvciHeaderReady) placeControls();
+      else document.addEventListener('lvci:ready', placeControls, { once: true });
+    })();
+  </script>
   <script>
     (() => {
       const checkbox = document.getElementById('show-nonproject');
