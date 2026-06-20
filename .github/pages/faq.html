@@ -155,6 +155,23 @@
 
     <div class="faq-item">
       <div class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>Where are the worker containers stored and where do they run?</span>
+        <span class="faq-icon">▼</span>
+      </div>
+      <div class="faq-a">
+        <p><strong>Stored</strong> in the <strong>GitHub Container Registry (GHCR, <code>ghcr.io</code>)</strong> as a package attached to <em>your</em> repository. The "Build LabVIEW CI Image" workflow builds your worker image and pushes it with the built-in <code>GITHUB_TOKEN</code>, so the image lives under your own account — for example <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;-labview</code> (and, if VI Browser 2.0 renders are enabled, <code>ghcr.io/&lt;owner&gt;/&lt;repo&gt;-toimages</code>). The image inherits your repository's visibility, and you can view or delete it under your repo's <strong>Packages</strong>. The NI base layer it builds on (<code>nationalinstruments/labview</code>) is pulled from NI's public registry — nothing is stored on the tooling author's servers.</p>
+        <p><strong>Run</strong> on the <strong>GitHub Actions runner</strong> that executes the workflow job, never on NI's or the tooling author's infrastructure. For each job the runner:</p>
+        <ul>
+          <li><strong>Pulls the image</strong> from GHCR (authenticating with the job's <code>GITHUB_TOKEN</code>), or from NI's registry for the base image.</li>
+          <li><strong>Starts a fresh container</strong> with your repository bind-mounted in, runs LabVIEW headless inside it, and writes the results back out.</li>
+          <li><strong>Destroys the container</strong> when the job ends (<code>docker run --rm</code>), so nothing persists between runs.</li>
+        </ul>
+        <p>Windows container jobs run on a <code>windows-2022</code> runner and Linux jobs on <code>ubuntu-latest</code> — either GitHub-hosted (the default) or a self-hosted runner you provide. In short: the images are your own packages on GitHub, and everything executes inside your own GitHub Actions environment, under your account's minutes and limits.</p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
         <span>How do I update LabVIEW CI to a new version?</span>
         <span class="faq-icon">▼</span>
       </div>
@@ -196,6 +213,22 @@
           <li><strong>Private repositories:</strong> counts against your GitHub Actions minutes quota (2,000/month included on Free, 3,000/month on Pro and Team)</li>
         </ul>
         <p>You can lower the max concurrent runners to stay within quota. Keep in mind that GitHub's concurrency limit &mdash; how many jobs run at once (Free 20, Pro 40, Team 60, Enterprise 500) &mdash; is <strong>per account and shared across all your repositories</strong>, not per repo, and routine submissions and tooling upgrades draw from that same pool. That's why the per-repo runner cap defaults to a conservative value.</p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">
+        <span>What is an Actions runner?</span>
+        <span class="faq-icon">▼</span>
+      </div>
+      <div class="faq-a">
+        <p>A <strong>runner</strong> is the machine that actually executes a GitHub Actions workflow job. When a run is triggered, GitHub hands the job to a runner, which checks out your code, runs each step in order, and — for LabVIEW CI — pulls and runs the worker container that does the compile, analysis, diff, or test. One job runs on one runner.</p>
+        <p>There are two kinds:</p>
+        <ul>
+          <li><strong>GitHub-hosted runners (the default).</strong> Fresh, disposable virtual machines GitHub provisions for each job — <code>windows-2022</code> for Windows jobs, <code>ubuntu-latest</code> for Linux — and wipes the moment the job finishes. There is nothing to install or maintain. They are free on public repositories and draw from your GitHub Actions minutes on private ones.</li>
+          <li><strong>Self-hosted runners.</strong> Machines you own and register with your repository or organization by running GitHub's runner agent on them. Use these when you need special hardware, a license tied to a specific machine, access to an internal network, or a persistent Docker layer cache so the multi-gigabyte worker image is not re-pulled every run. You are responsible for keeping them online and updated.</li>
+        </ul>
+        <p>Because the worker container runs <em>on the runner</em>, choosing a runner is how you choose where your CI executes. You pick GitHub-hosted or a self-hosted runner label during setup or from <strong>⚙ Configure Workers</strong>. Note that GitHub caps how many jobs — and therefore runners — can run at once per account (see the cost question above), which is why LabVIEW CI has a max concurrent runners setting.</p>
       </div>
     </div>
 

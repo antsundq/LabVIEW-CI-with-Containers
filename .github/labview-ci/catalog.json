@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.21.0",
+  "version": "3.21.1",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.21.1",
+        "date": "2026-06-19",
+        "title": "Two new FAQ entries: where worker containers live, and what an Actions runner is",
+        "summary": "The FAQ now answers two common infrastructure questions. 'Where are the worker containers stored and where do they run?' explains that your worker image is stored in the GitHub Container Registry (GHCR) as a package under your own repository (ghcr.io/<owner>/<repo>-labview), built with the built-in GITHUB_TOKEN, and that it runs on the GitHub Actions runner that executes each job - a fresh container is pulled, started with your repo mounted, and destroyed when the job ends, all inside your own GitHub Actions environment. 'What is an Actions runner?' explains that a runner is the machine that executes a workflow job, and the difference between GitHub-hosted runners (disposable windows-2022 / ubuntu-latest VMs) and self-hosted runners you provide.",
+        "highlights": [
+          "New FAQ entry 'Where are the worker containers stored and where do they run?' - images live in GHCR as packages under your repo; containers run and are torn down on the GitHub Actions runner, never on NI's or the author's servers.",
+          "New FAQ entry 'What is an Actions runner?' - explains GitHub-hosted vs self-hosted runners, where the worker container actually executes, and how the max concurrent runners cap relates to GitHub's per-account concurrency limit.",
+          "Documentation only - no change to any workflow, container, or dashboard behaviour."
+        ]
+      },
       {
         "version": "3.21.0",
         "date": "2026-06-20",
