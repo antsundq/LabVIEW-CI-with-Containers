@@ -676,14 +676,27 @@ for c in commits_data:
             snap_glyph = (f'<a href="{pages_url}/vi-snapshots/index.html?sha={sha}" '
                           f'class="snap-glyph" title="{_gtip}" aria-label="{_gtip}">{SNAP_ICON}</a>')
 
+    # Avatar for the rich Revision cell: a deterministic initial-circle (no
+    # network-avatar dependency - the commits API often has no linked GitHub
+    # user). The hue is derived from the author name so each author keeps a
+    # stable colour; white text on a mid-tone fill reads in both themes.
+    _av_name = (author or '').strip()
+    _av_initial = next((ch for ch in _av_name if ch.isalnum()), '?').upper()
+    _av_hue = (sum(ord(ch) for ch in _av_name) % 360) if _av_name else 210
+    _av_bg = f'hsl({_av_hue},42%,45%)'
+    _browse = f'{pages_url}/vi-snapshots/index.html?sha={sha}'
+
     rows_html.append(f"""
     <tr data-project="{proj_flag}">
-      <td style="padding:8px;font-family:monospace;font-size:.85em">
-        <a href="{pages_url}/vi-snapshots/index.html?sha={sha}" style="color:var(--link)" title="Browse this commit's VIs in the VI Browser">{short}</a>
+      <td class="cidash-rev">
+        <div class="cidash-rev-wrap">
+          <span class="cidash-avatar" style="background:{_av_bg}" title="{html.escape(author)}" aria-hidden="true">{html.escape(_av_initial)}</span>
+          <div class="cidash-rev-body">
+            <div class="cidash-rev-line1"><a href="{_browse}" class="cidash-rev-msg" title="{html.escape(msg)}">{html.escape(msg)}</a>{snap_glyph}</div>
+            <div class="cidash-rev-meta"><a href="{_browse}" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">{short}</a><span class="cidash-rev-dot">&middot;</span>{html.escape(author)}<span class="cidash-rev-dot">&middot;</span>{date[:10]}</div>
+          </div>
+        </div>
       </td>
-      <td style="padding:8px;font-size:.85em;max-width:320px" title="{html.escape(msg)}"><span style="display:flex;align-items:center;gap:6px;min-width:0"><a href="{pages_url}/vi-snapshots/index.html?sha={sha}" style="color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">{html.escape(msg)}</a>{snap_glyph}</span></td>
-      <td style="padding:8px;font-size:.82em;color:var(--fg-muted)">{html.escape(author)}</td>
-      <td style="padding:8px;font-size:.75em;color:var(--fg-muted)">{date[:10]}</td>
       {mc_badge}
       {via_badge}
       {diff_badge}
@@ -2301,6 +2314,18 @@ html = f"""<!DOCTYPE html>
       .cidash-chip.cc-warn{{background:#fff8c5;color:#9a6700;border-color:#9a670055}}
       .cidash-chip.cc-info{{background:#ddf4ff;color:#0969da;border-color:#0969da44}}
     }}
+    /* Rich "Revision" cell: avatar + message (primary) + sha / author / date (meta). */
+    .cidash-rev{{padding:8px;max-width:440px}}
+    .cidash-rev-wrap{{display:flex;gap:10px;align-items:flex-start;min-width:0}}
+    .cidash-avatar{{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:.78em;font-weight:600;text-transform:uppercase;line-height:1}}
+    .cidash-rev-body{{display:flex;flex-direction:column;min-width:0;gap:2px}}
+    .cidash-rev-line1{{display:flex;align-items:center;gap:6px;min-width:0}}
+    .cidash-rev-msg{{color:var(--fg);font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;text-decoration:none}}
+    .cidash-rev-msg:hover{{text-decoration:underline}}
+    .cidash-rev-meta{{display:flex;align-items:center;gap:6px;font-size:.78em;color:var(--fg-muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    .cidash-rev-sha{{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--link);text-decoration:none}}
+    .cidash-rev-sha:hover{{text-decoration:underline}}
+    .cidash-rev-dot{{color:var(--border)}}
     {run_dialog_css}
   </style>
 </head>
@@ -2363,7 +2388,7 @@ html = f"""<!DOCTYPE html>
   <table id="cidash-table">
     <thead>
       <tr>
-        <th>Commit</th><th>Message</th><th>Author</th><th>Date</th>
+        <th>Revision</th>
         <th style="text-align:center">Mass Compile</th>
         <th style="text-align:center">VI Analyzer</th>
         <th style="text-align:center">VIDiff</th>
@@ -2436,21 +2461,19 @@ html = f"""<!DOCTYPE html>
     }})();
 
     // Column-visibility menu: a standard "Columns" dropdown of checkboxes that
-    // toggles each (non-identifier) column on/off, persisted per-repo in
-    // localStorage so the choice survives reloads. Commit (column 0) is the row
-    // identifier and is always shown.
+    // toggles each activity column on/off, persisted per-repo in localStorage so
+    // the choice survives reloads. The Revision cell (column 0) is the row
+    // identifier and is always shown. Persistence is keyed by column KEY, so the
+    // idx values can change without invalidating a saved preference.
     (() => {{
       const STORE = 'lvci_dash_cols_{repo}';
       const COLS = [
-        {{key:'message',     label:'Message',      idx:1}},
-        {{key:'author',      label:'Author',       idx:2}},
-        {{key:'date',        label:'Date',         idx:3}},
-        {{key:'masscompile', label:'Mass Compile', idx:4}},
-        {{key:'vi-analyzer', label:'VI Analyzer',  idx:5}},
-        {{key:'vidiff',      label:'VIDiff',       idx:6}},
-        {{key:'snapshots',   label:'Snapshots',    idx:7}},
-        {{key:'unit-tests',  label:'Unit Tests',   idx:8}},
-        {{key:'antidoc',     label:'Antidoc',      idx:9}}
+        {{key:'masscompile', label:'Mass Compile', idx:1}},
+        {{key:'vi-analyzer', label:'VI Analyzer',  idx:2}},
+        {{key:'vidiff',      label:'VIDiff',       idx:3}},
+        {{key:'snapshots',   label:'Snapshots',    idx:4}},
+        {{key:'unit-tests',  label:'Unit Tests',   idx:5}},
+        {{key:'antidoc',     label:'Antidoc',      idx:6}}
       ];
       const btn = document.getElementById('cidash-colbtn');
       const panel = document.getElementById('cidash-colpanel');
