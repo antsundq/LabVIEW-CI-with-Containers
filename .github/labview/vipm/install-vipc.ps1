@@ -249,10 +249,35 @@ function Get-VipcPackageSpecs([string]$VipcPath) {
 }
 
 $applyFailed = $false
-# Global vipm options (verified via 'vipm install --help' on 2026.1.0): --refresh
-# updates the package list first; --labview-version/--labview-bitness target the
-# LabVIEW in the image. This CLI is non-interactive by default (there is NO '-y').
-$InstallFlags = @('--refresh', '--labview-version', $LabVIEWVersion, '--labview-bitness', $LabVIEWBitness)
+# VIPM 2026 Q3 (26.3) CLI flags (verified against docs.vipm.io command-reference):
+#   * --labview-version / --labview-bitness are GLOBAL options and must PRECEDE the
+#     'install' subcommand; they target the LabVIEW baked into the image.
+#   * There is NO '--refresh' option on 'install' anymore - the package list is
+#     updated by the SEPARATE 'vipm refresh' command (run once below). (In the older
+#     2026.1.0 CLI '--refresh' was a global option; 26.3 removed it - passing it now
+#     fails with exit 2 COMMAND_SYNTAX_ERROR: "unexpected argument '--refresh'".)
+#   * The CLI is non-interactive via the VIPM_NONINTERACTIVE / VIPM_ASSUME_YES env
+#     vars set above, so no '-y' is required.
+$GlobalFlags = @('--labview-version', $LabVIEWVersion, '--labview-bitness', $LabVIEWBitness)
+
+# Run 'vipm install' with the global LabVIEW target flags in front of the subcommand.
+# Exit 2 (COMMAND_SYNTAX_ERROR) means this CLI build rejected the flag position; fall
+# back to the bare form, which targets the active LabVIEW from the seeded Settings.ini.
+function Invoke-VipmInstall {
+    param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $Targets)
+    & $VipmExe @GlobalFlags install @Targets 2>&1 | Out-Host
+    if ($LASTEXITCODE -eq 2) {
+        Write-Host '  (install rejected global LabVIEW flags; retrying bare form against active target)'
+        & $VipmExe install @Targets 2>&1 | Out-Host
+    }
+    return $LASTEXITCODE
+}
+
+# Refresh all package sources once (best-effort - a refresh failure is only a warning
+# because version-pinned installs can still resolve from the local cache).
+Write-Host 'Refreshing VIPM package sources (vipm refresh) ...'
+& $VipmExe refresh 2>&1 | Out-Host
+
 foreach ($vipc in $vipcFiles) {
     Write-Host "Resolving packages from VIPC: $($vipc.Name)"
     $specs = @(Get-VipcPackageSpecs $vipc.FullName)
@@ -260,21 +285,21 @@ foreach ($vipc in $vipcFiles) {
         # Could not parse package names - last resort: try installing the file directly
         # (works only if a real, VIPM-editor-made .vipc was dropped in).
         Write-Host "  no packages parsed from config.xml; trying 'vipm install <file.vipc>' directly ..."
-        & $VipmExe install $vipc.FullName @InstallFlags 2>&1 | Out-Host
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "VIPM could not install from '$($vipc.Name)' (exit $LASTEXITCODE)."
+        $rc = Invoke-VipmInstall $vipc.FullName
+        if ($rc -ne 0) {
+            Write-Warning "VIPM could not install from '$($vipc.Name)' (exit $rc)."
             $applyFailed = $true
         }
         continue
     }
     Write-Host ("  Installing by name: " + ($specs -join ', '))
-    & $VipmExe install @specs @InstallFlags 2>&1 | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  batch install failed (exit $LASTEXITCODE); retrying each package individually ..."
+    $rc = Invoke-VipmInstall @specs
+    if ($rc -ne 0) {
+        Write-Host "  batch install failed (exit $rc); retrying each package individually ..."
         foreach ($spec in $specs) {
-            & $VipmExe install $spec @InstallFlags 2>&1 | Out-Host
-            if ($LASTEXITCODE -ne 0) {
-                Write-Warning "  package '$spec' failed (exit $LASTEXITCODE)."
+            $rc = Invoke-VipmInstall $spec
+            if ($rc -ne 0) {
+                Write-Warning "  package '$spec' failed (exit $rc)."
                 $applyFailed = $true
             }
         }

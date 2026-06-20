@@ -114,22 +114,31 @@ Fix: set **`VIPM_TIMEOUT`** (seconds) to override the default/CI-adjusted
 timeout. The script sets `VIPM_TIMEOUT=900`. See
 <https://docs.vipm.io/latest/cli/environment-variables/>.
 
-### 7. CLI command shape (modern Rust/clap CLI)
+### 7. CLI command shape (26.3 Rust/clap CLI)
 
-Verified against `vipm install --help`:
+Verified against `vipm install --help` and the
+<https://docs.vipm.io/latest/cli/command-reference/> reference. **The 26.3 CLI
+changed shape vs. the older `2026.1.0` build — mind the differences:**
 
 - Install by name with a pinned version using **`@`**:
   `vipm install ni_lib_utf_junit_report@1.0.1.43`
   (the hyphen form `pkg-1.2.3.4` is misread as a file path).
-- Useful global options: `--refresh` (update the package list first),
-  `--labview-version <YYYY>`, `--labview-bitness <32|64>`,
-  `--color-mode auto|always|never`.
-- There is **no** `-y` flag and (on `2026.1.0`) **no** standalone `refresh`
-  command — non-interactive is controlled by the env vars above, and the package
-  list is refreshed via the global `--refresh` option.
+- **Global** options (place them **before** the `install` subcommand):
+  `--labview-version <YYYY>`, `--labview-bitness <32|64>`, `--timeout <SECONDS>`,
+  `--json`, `--color-mode auto|always|never`, `-v/--verbose`. They are accepted
+  on every command; the script calls
+  `vipm --labview-version 2026 --labview-bitness 64 install <pkgs>`.
+- **`--refresh` was removed** from `install` (it existed as a global option on
+  `2026.1.0`). 26.3 refreshes the package list with a **separate**
+  `vipm refresh` command, which the script runs once before installing. Passing
+  `--refresh` to `install` now fails with exit `2` (`COMMAND_SYNTAX_ERROR`:
+  *"unexpected argument '--refresh' found"*).
+- `-y` / `--yes` **does** exist in 26.3 (skips the confirm prompt when installing
+  **from a file**), but the script relies on the `VIPM_NONINTERACTIVE` /
+  `VIPM_ASSUME_YES` env vars instead, so it isn't needed.
 - The `config.xml`-only `.vipc` produced by `build-tooling-vipc.py` is **not**
-  accepted by `vipm install <file.vipc>` directly, so the script parses the
-  package names out of the `.vipc` and installs each **by name**.
+  reliably accepted by `vipm install <file.vipc>` directly, so the script parses
+  the package names out of the `.vipc` and installs each **by name**.
 
 ---
 
@@ -156,9 +165,9 @@ Verified against `vipm install --help`:
 | `LabVIEW CLI error -350053` during RunUnitTests | UTF JUnit Report library not baked in — VIPM install was skipped or failed. Check this hook's log. |
 | `IO error: Failed to load …Settings.ini … (os error 2)` | VIPM `Settings.ini` missing — the script's seed step didn't run (no LabVIEW found?). |
 | `Operation 'VIPM command 'library_list'' timed out after 330s` | Short build-time timeout and/or an old CLI. Use VIPM 26.3+ and raise `VIPM_TIMEOUT`. |
-| `error: unexpected argument '-y' found` | Old habit — the modern CLI has no `-y`; use the non-interactive env vars. |
-| `no such command: refresh` | Use the global `--refresh` option on `install`, not a standalone `refresh` subcommand. |
-| Package install reports "not found" | Package name/version wrong, or the package list wasn't refreshed — keep `--refresh`, verify the `name@version`. |
+| `error: unexpected argument '--refresh' found` (exit 2) | 26.3 removed `--refresh` from `install`. Run the standalone `vipm refresh` first; don't pass `--refresh` to `install`. |
+| `error: unexpected argument '--labview-version' found` (exit 2) | Global options must go **before** the `install` subcommand: `vipm --labview-version 2026 install <pkgs>`. The script also falls back to the bare form (active target from `Settings.ini`). |
+| Package install reports "not found" | Package name/version wrong, or the package list wasn't refreshed — run `vipm refresh` first and verify the `name@version`. |
 
 ---
 
