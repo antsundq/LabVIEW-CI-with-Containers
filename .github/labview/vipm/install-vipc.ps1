@@ -33,7 +33,7 @@ $VipmExe          = $null
 $VipcDir          = 'C:\vipm'
 $LabVIEWVersion   = if ($Env:LABVIEW_VERSION)    { $Env:LABVIEW_VERSION }    else { '2026' }  # match the LabVIEW version in the NI base image
 $LabVIEWBitness   = if ($Env:LABVIEW_BITNESS)    { $Env:LABVIEW_BITNESS }    else { '64' }    # NI base image ships 64-bit LabVIEW
-$VipmInstallerUrl = if ($Env:VIPM_INSTALLER_URL) { $Env:VIPM_INSTALLER_URL } else { 'https://vipm.jki.net/l/download/vipm_2024_x64.exe' }
+$VipmInstallerUrl = if ($Env:VIPM_INSTALLER_URL) { $Env:VIPM_INSTALLER_URL } else { 'https://traffic.libsyn.com/secure/jkinc/vipm-26.3.3954-windows-setup.exe' }
 
 # Run VIPM non-interactively in Community Edition so headless installs need no
 # VIPM Pro activation (verified against the official vipm-io GitHub Action, which
@@ -43,16 +43,24 @@ $Env:VIPM_COMMUNITY_EDITION = '1'
 $Env:VIPM_NONINTERACTIVE    = '1'
 $Env:VIPM_ASSUME_YES        = '1'
 $Env:NO_COLOR               = '1'
+# Bound the per-operation timeout. During `docker build` the GITHUB_ACTIONS / CI
+# env vars are NOT present, so VIPM does not apply its longer "CI" default timeouts
+# and its short defaults (check_for_updates ~270s, library_list ~330s) can abort a
+# cold, first-run headless LabVIEW before it finishes responding. VIPM_TIMEOUT
+# overrides the default/CI-adjusted timeout, in seconds.
+# See docs.vipm.io/latest/cli/environment-variables.
+$Env:VIPM_TIMEOUT           = if ($Env:VIPM_TIMEOUT) { $Env:VIPM_TIMEOUT } else { '900' }
 
 # -- 1. Install VIPM if not already present -----------------------------------
-# VIPM is normally pre-installed into the image from the NI Package Manager feed
-# (package 'ni-vipm', done in labview-ci.Dockerfile), so this script just finds
-# vipm.exe and applies the .vipc. If it is NOT already present we fall back to the
-# external VIPM community installer, which is OPTIONAL and fetched from a
-# vendor-controlled URL that can move or 404 at any time, so a download/install
-# failure must NOT brick the core CI image (LabVIEW + VI Analyzer were installed
-# above). Treat the fallback as best-effort: on failure, warn and skip the add-ons
-# (exit 0) instead of failing the whole image build.
+# VIPM is normally pre-installed into the image by labview-ci.Dockerfile, which
+# downloads the official VIPM 2026 Q3 (26.3.3954) Windows installer from the JKI
+# CDN and runs it silently, so this script just finds vipm.exe and applies the
+# .vipc. If it is NOT already present we fall back to downloading the same
+# installer here ($VipmInstallerUrl, overridable via VIPM_INSTALLER_URL). That
+# fallback is OPTIONAL and fetched from a vendor-controlled URL that can move or
+# 404 at any time, so a download/install failure must NOT brick the core CI image
+# (LabVIEW + VI Analyzer were installed above). Treat the fallback as best-effort:
+# on failure, warn and skip the add-ons (exit 0) instead of failing the build.
 # Prefer the MODERN vipm CLI (C:\Program Files\JKI\VIPM) over the legacy
 # LabVIEW-based CLI (C:\Program Files\JKI\VI Package Manager\...). The modern CLI
 # has first-class headless/container support (--refresh, Community Edition mode)
@@ -82,7 +90,7 @@ if (-not $VipmExe -or -not (Test-Path $VipmExe)) {
 
         Write-Host 'Running VIPM installer silently...'
         $p = Start-Process -FilePath $InstallerFile `
-            -ArgumentList '/SILENT', '/NORESTART' `
+            -ArgumentList '/exenoui', '/qn' `
             -Wait -PassThru
         if ($p.ExitCode -ne 0) {
             throw "VIPM installer exited with code $($p.ExitCode)"

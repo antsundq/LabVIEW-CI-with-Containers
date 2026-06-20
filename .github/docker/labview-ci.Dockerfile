@@ -98,26 +98,35 @@ RUN $ErrorActionPreference = 'Continue'; `
       Remove-Item -Path 'C:\ProgramData\National Instruments\NI Package Manager\cache\*' -Force -Recurse -ErrorAction SilentlyContinue `
     }
 
-# Install VIPM (the JKI VI Package Manager) from the NI Package Manager feed so the
-# VIPC hook below can bake in VIPM-distributed add-ons - Antidoc, Caraya, VI Tester,
-# and crucially the "UTF JUnit Report" library (ni_lib_utf_junit_report) that the
-# built-in 'LabVIEWCLI -OperationName RunUnitTests' operation links against to emit
-# its JUnit results file (without it RunUnitTests fails with LabVIEW CLI error -350053).
-# VIPM was previously fetched by install-vipc.ps1 from an external JKI installer URL,
-# but that URL now 404s (and the replacement is auth-gated). NI publishes VIPM on the
-# SAME feed as the support packages above (package 'ni-vipm'), so installing it here is
-# fully reproducible and needs no external, auth-gated download; install-vipc.ps1 then
-# finds vipm.exe already present and skips its (dead) download path. BEST-EFFORT: a
-# failure emits a ::warning:: and leaves the core image (LabVIEW + VI Analyzer + UTF)
-# intact - only VIPM-distributed add-ons are then absent.
-ARG VIPM_PACKAGE=ni-vipm
+# Install VIPM (the JKI VI Package Manager) so the VIPC hook below can bake in
+# VIPM-distributed add-ons - Antidoc, Caraya, VI Tester, and crucially the
+# "UTF JUnit Report" library (ni_lib_utf_junit_report) that the built-in
+# 'LabVIEWCLI -OperationName RunUnitTests' operation links against to emit its
+# JUnit results file (without it RunUnitTests fails with LabVIEW CLI error -350053).
+#
+# UPGRADED to the VIPM 2026 Q3 release (26.3.3954). The NI feed's 'ni-vipm' package
+# ships an OLDER VIPM (2026.1.0) whose CLI cannot complete a headless package install
+# in a Windows container: its 'library_list' call into LabVIEW times out (~330s) and
+# the older CLI does not surface the underlying error. The 2026 Q3 build surfaces
+# underlying install errors and improves headless/container support, so we install it
+# directly from the official JKI CDN (per docs.vipm.io/latest/installation). The
+# installer is a standard InstallShield setup; '/exenoui /qn' runs it fully silent.
+# BEST-EFFORT: a failure emits a ::warning:: and leaves the core image
+# (LabVIEW + VI Analyzer + UTF) intact - only VIPM-distributed add-ons are then absent.
+ARG VIPM_INSTALLER_URL=https://traffic.libsyn.com/secure/jkinc/vipm-26.3.3954-windows-setup.exe
 RUN $ErrorActionPreference = 'Continue'; `
-    Write-Host "Installing VIPM from the NI feed: $env:VIPM_PACKAGE"; `
-    nipkg install --accept-eulas -y $env:VIPM_PACKAGE; `
-    if ($LASTEXITCODE -ne 0) { `
-      Write-Host "::warning::VIPM package '$($env:VIPM_PACKAGE)' did not install (exit $LASTEXITCODE); VIPM-distributed add-ons (including the UTF JUnit Report library) will not be baked in." `
-    } elseif (Test-Path 'C:\ProgramData\National Instruments\NI Package Manager\cache') { `
-      Remove-Item -Path 'C:\ProgramData\National Instruments\NI Package Manager\cache\*' -Force -Recurse -ErrorAction SilentlyContinue `
+    $vipmSetup = Join-Path $env:TEMP 'vipm-setup.exe'; `
+    Write-Host "Downloading VIPM 2026 Q3 installer: $env:VIPM_INSTALLER_URL"; `
+    try { `
+      Invoke-WebRequest -Uri $env:VIPM_INSTALLER_URL -OutFile $vipmSetup -UseBasicParsing; `
+      Write-Host ('Downloaded {0:N1} MB; installing VIPM silently (/exenoui /qn) ...' -f ((Get-Item $vipmSetup).Length / 1MB)); `
+      $p = Start-Process -Wait -PassThru -FilePath $vipmSetup -ArgumentList '/exenoui','/qn'; `
+      Write-Host "VIPM installer exit code: $($p.ExitCode)"; `
+      if ($p.ExitCode -ne 0) { Write-Host "::warning::VIPM 2026 Q3 installer returned exit $($p.ExitCode); VIPM-distributed add-ons may not be baked in." } `
+    } catch { `
+      Write-Host "::warning::VIPM 2026 Q3 install failed ($($_.Exception.Message)); VIPM-distributed add-ons (including the UTF JUnit Report library) will not be baked in." `
+    } finally { `
+      Remove-Item $vipmSetup -Force -ErrorAction SilentlyContinue `
     }
 
 # Optional VIPC support hook. If .vipc files exist, an installer script must be
