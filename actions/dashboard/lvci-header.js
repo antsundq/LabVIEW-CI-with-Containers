@@ -592,7 +592,11 @@
 
   // Order the per-revision activities appear in the context-bar Activity picker
   // (the report half of the unified Activity switcher; per-VI lenses join later).
-  var LENS_ORDER = ['masscompile-report', 'vi-analyzer-report', 'unit-tests-report', 'antidoc-report'];
+  // Order the per-revision activities appear in the context-bar Activity picker.
+  // 'snapshots' = the VI Browser (this revision's VIs); the rest are the per-revision
+  // reports. From any report you can jump to the VI Browser (or another report) for the
+  // SAME revision. (The picker also appearing INSIDE the VI Browser is a later slice.)
+  var LENS_ORDER = ['snapshots', 'masscompile-report', 'vi-analyzer-report', 'unit-tests-report', 'antidoc-report'];
 
   // ── Context actions (surfaced on the right; collapse into the mobile menu).
   //    Each action: {label, kind|href, primary|accent, newTab}. `kind` triggers
@@ -961,6 +965,7 @@
   // in the context bar) and reuses its summary.json availability probe, so a report
   // that was not produced for this revision is shown disabled rather than 404ing.
   function lensDest(key) {
+    if (key === 'snapshots') return base + '/vi-snapshots/' + (cfg.sha ? '?sha=' + encodeURIComponent(cfg.sha) : '');
     var d = DOCTYPES[key]; if (!d || !cfg.sha) return base + '/';
     var bare = base + '/' + d.prefix + '/' + cfg.sha + '/index.html';
     if (cfg.embedded && cfg.framedSrc) {
@@ -977,10 +982,12 @@
     var wrap = document.createElement('div'); wrap.className = 'lvci-rev lvci-lens-ctx';
     var lbl = document.createElement('span'); lbl.className = 'lvci-revlbl'; lbl.textContent = 'Activity';
     var sel = document.createElement('select');
-    sel.setAttribute('aria-label', 'Switch to another report for this revision');
+    sel.setAttribute('aria-label', 'Switch to another view of this revision');
     LENS_ORDER.forEach(function (key) {
-      var d = DOCTYPES[key]; if (!d) return;
-      var o = document.createElement('option'); o.value = key; o.textContent = d.label;
+      var label;
+      if (key === 'snapshots') { label = 'Snapshots'; }
+      else { var d = DOCTYPES[key]; if (!d) return; label = d.label; }
+      var o = document.createElement('option'); o.value = key; o.textContent = label;
       if (key === ctx) o.selected = true;
       sel.appendChild(o);
     });
