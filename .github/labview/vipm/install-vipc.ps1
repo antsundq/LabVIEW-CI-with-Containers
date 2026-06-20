@@ -42,11 +42,15 @@ $VipmInstallerUrl = if ($Env:VIPM_INSTALLER_URL) { $Env:VIPM_INSTALLER_URL } els
 # building repo's clone URL so forks use their own public repo).
 $PublicRepoUrl    = if ($Env:VIPM_PUBLIC_REPO_URL) { $Env:VIPM_PUBLIC_REPO_URL } else { 'https://github.com/elijah286/LabVIEW-CI-with-Containers.git' }
 
-# Run VIPM non-interactively in Community Edition so headless installs need no
-# VIPM Pro activation (verified against the official vipm-io GitHub Action, which
-# defaults to Community Edition). These env vars are read by the modern vipm CLI;
-# older CLIs ignore them harmlessly.
-$Env:VIPM_COMMUNITY_EDITION = '1'
+# Run VIPM non-interactively so headless installs need no prompts. We deliberately
+# do NOT set VIPM_COMMUNITY_EDITION here: forcing Community Edition mode turns ON
+# VIPM's public-Git-repository entitlement gate (exit 6, "VIPM Community Edition
+# requires a public Git repository"), which blocks installs inside the sealed
+# `docker build` layer. The CLI already runs as Community Edition by default WITHOUT
+# enforcing that gate, so installs proceed and no VIPM Pro license is needed.
+# (If VIPM_COMMUNITY_EDITION=1 is supplied externally we honor it, and the MinGit +
+# public-repo .git context below then satisfies the gate.) These env vars are read
+# by the modern vipm CLI; older CLIs ignore them harmlessly.
 $Env:VIPM_NONINTERACTIVE    = '1'
 $Env:VIPM_ASSUME_YES        = '1'
 $Env:NO_COLOR               = '1'
@@ -297,10 +301,13 @@ function Invoke-VipmInstall {
 # VIPM 26.3 Community Edition refuses to install ("exit 6: VIPM Community Edition
 # requires a public Git repository") unless the current working directory is inside
 # a PUBLIC Git repository. It only reads .git/config's origin URL (and verifies the
-# repo is public) - it does NOT need a git binary, a clone, or any commits. So we
-# fabricate a minimal .git pointing origin at the public worker repo and run the
-# installs from there. Verified locally against VIPM 26.3: this clears the exit-6
-# gate and the install proceeds.
+# repo is public). When Community Edition enforcement is active it shells out to a
+# real `git` binary (MinGit, baked into C:\git by labview-ci.Dockerfile) to read
+# .git/config's origin URL and verify the repo is public - so a minimal fabricated
+# .git (no clone or commits required) plus git on PATH is enough. We default to NOT
+# forcing CE (see above), but keep this public-repo context as a safety net so the
+# install still works if CE enforcement is enabled. Verified locally against VIPM
+# 26.3: with git present this clears the exit-6 gate and the install proceeds.
 function New-PublicRepoWorkdir {
     param([string] $RepoUrl)
     $work = Join-Path $env:TEMP ('vipm-install-' + [Guid]::NewGuid().ToString('N'))
@@ -320,21 +327,28 @@ try {
     Write-Host "Running VIPM installs from a public-repo context (origin=$PublicRepoUrl) to satisfy Community Edition."
     Set-Location $installWorkdir
 
-    Write-Host 'Refreshing VIPM package sources (vipm refresh) ...'
-    & $VipmExe refresh 2>&1 | Out-Host
+    # Force a full re-download of the package spec index. A fresh headless VIPM in a
+    # container starts with an empty CLI spec cache (C:\ProgramData\JKI\VIPM\cache);
+    # a plain `vipm refresh` reported "complete" but downloaded no specs, so every
+    # package resolved as "not found" (exit 3). --force re-fetches the index.
+    Write-Host 'Refreshing VIPM package sources (vipm refresh --force) ...'
+    & $VipmExe refresh --force 2>&1 | Out-Host
 
     foreach ($vipc in $vipcFiles) {
-        Write-Host "Resolving packages from VIPC: $($vipc.Name)"
+        Write-Host "Applying VIPC: $($vipc.Name)"
+        # Preferred path: install the .vipc file directly (the form VIPM documents:
+        # `vipm install -y project.vipc`). VIPM resolves the full package set from the
+        # file, including transitive dependencies, rather than us parsing names.
+        Write-Host "  Installing from file: vipm install -y '$($vipc.Name)'"
+        $rc = Invoke-VipmInstall '-y' $vipc.FullName
+        if ($rc -eq 0) { continue }
+
+        # Fall back to per-package install by name parsed from the .vipc's config.xml.
+        Write-Host "  install from file failed (exit $rc); falling back to per-package names ..."
         $specs = @(Get-VipcPackageSpecs $vipc.FullName)
         if ($specs.Count -eq 0) {
-            # Could not parse package names - last resort: try installing the file directly
-            # (works only if a real, VIPM-editor-made .vipc was dropped in).
-            Write-Host "  no packages parsed from config.xml; trying 'vipm install <file.vipc>' directly ..."
-            $rc = Invoke-VipmInstall $vipc.FullName
-            if ($rc -ne 0) {
-                Write-Warning "VIPM could not install from '$($vipc.Name)' (exit $rc)."
-                $applyFailed = $true
-            }
+            Write-Warning "VIPM could not install from '$($vipc.Name)' (exit $rc) and no package names could be parsed."
+            $applyFailed = $true
             continue
         }
         Write-Host ("  Installing by name: " + ($specs -join ', '))
