@@ -1285,11 +1285,20 @@
     // the backfill card the same way.
     if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); qSync(); bfInit(); }); }
     else { applyQueued(); qSync(); bfInit(); }
+    // Returning to the dashboard after kicking off a run elsewhere (e.g. "Re-run
+    // analysis" from a report, or a run started in another tab) should reflect it
+    // right away. The page otherwise only updates on its auto-refresh timer (up to
+    // 15 min when idle), so re-apply the optimistic "Queued" overlays and re-sync
+    // against GitHub whenever the tab is shown again or regains focus (throttled).
+    var _qReChk = 0;
+    function qRecheck(){ var n = Date.now(); if(n - _qReChk < 4000) return; _qReChk = n; try{ applyQueued(); qSync(); }catch(e){} }
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) qRecheck(); });
+    window.addEventListener('focus', qRecheck);
   })();
   </script>
   <main class="lvci-main">
   <h1>CI Dashboard — LabVIEW-CI-with-Containers</h1>
-  <div class="sub">Last updated: 2026-06-20 00:16 UTC &nbsp;|&nbsp; Auto-refreshes every 15 min</div>
+  <div class="sub">Last updated: 2026-06-20 00:44 UTC &nbsp;|&nbsp; Auto-refreshes every 15 min</div>
   <div class="nav">
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers">GitHub</a>
     <a href="https://github.com/elijah286/LabVIEW-CI-with-Containers/actions">Actions</a>
@@ -1329,6 +1338,24 @@
       </tr>
     </thead>
     <tbody>
+    <tr data-project="false">
+      <td class="cidash-rev">
+        <div class="cidash-rev-wrap">
+          <span class="cidash-avatar" style="background:hsl(66,42%,45%)" title="Elijah Kerry" aria-hidden="true">E</span>
+          <div class="cidash-rev-body">
+            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2a741995e6eb9392d26296d72b9b8cf83c6892fc" class="cidash-rev-msg" title="dashboard: re-check queued/running state when the tab is shown again (v3.13.2)">dashboard: re-check queued/running state when the tab is shown again (v3.13.2)</a></div>
+            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=2a741995e6eb9392d26296d72b9b8cf83c6892fc" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">2a74199</a><span class="cidash-rev-dot">&middot;</span>Elijah Kerry<span class="cidash-rev-dot">&middot;</span>2026-06-20</div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
+    </tr>
+
     <tr data-project="false">
       <td class="cidash-rev">
         <div class="cidash-rev-wrap">
@@ -3100,24 +3127,6 @@
           <div class="cidash-rev-body">
             <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=edecb3fb0353caa41fc81b51687d48d0e0b661c2" class="cidash-rev-msg" title="update fix: defer brand-new workflow files too, not just modified ones (v3.0.1)">update fix: defer brand-new workflow files too, not just modified ones (v3.0.1)</a></div>
             <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=edecb3fb0353caa41fc81b51687d48d0e0b661c2" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">edecb3f</a><span class="cidash-rev-dot">&middot;</span>elijah286<span class="cidash-rev-dot">&middot;</span>2026-06-17</div>
-          </div>
-        </div>
-      </td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-      <td style="text-align:center;color:var(--fg-muted);font-size:.75em">—</td>
-    </tr>
-
-    <tr data-project="false">
-      <td class="cidash-rev">
-        <div class="cidash-rev-wrap">
-          <span class="cidash-avatar" style="background:hsl(61,42%,45%)" title="elijah286" aria-hidden="true">E</span>
-          <div class="cidash-rev-body">
-            <div class="cidash-rev-line1"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=6f2034491fb412433110a7d92942743f26ba1b21" class="cidash-rev-msg" title="release v3.0.0: unit testing major rollout">release v3.0.0: unit testing major rollout</a></div>
-            <div class="cidash-rev-meta"><a href="https://elijah286.github.io/LabVIEW-CI-with-Containers/vi-snapshots/index.html?sha=6f2034491fb412433110a7d92942743f26ba1b21" class="cidash-rev-sha" title="Browse this revision's VIs in the VI Browser">6f20344</a><span class="cidash-rev-dot">&middot;</span>elijah286<span class="cidash-rev-dot">&middot;</span>2026-06-17</div>
           </div>
         </div>
       </td>
