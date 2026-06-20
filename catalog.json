@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.13.2",
+  "version": "3.13.3",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.13.3",
+        "date": "2026-06-19",
+        "title": "The dashboard revision table now collapses to cards on narrow screens",
+        "summary": "On phones and narrow windows the revision table no longer forces a horizontal scroll: each revision becomes a self-contained card, and every activity result (Mass Compile, VI Analyzer, VIDiff, Snapshots, Unit Tests, Antidoc) is shown on its own labelled line so you can tell what each status belongs to without a header row. On wider screens it stays the familiar table. Display-only - the data, links, and run / queue / re-run behaviour are unchanged.",
+        "highlights": [
+          "Below ~820px the revision table reflows into one card per revision, removing the need to scroll sideways.",
+          "Each activity cell carries its column name as an inline label, so a result still reads clearly once the header row is hidden.",
+          "Wider screens are unchanged - the same table, rich Revision cell, search, status filter, and Columns menu all keep working."
+        ]
+      },
       {
         "version": "3.13.2",
         "date": "2026-06-19",
