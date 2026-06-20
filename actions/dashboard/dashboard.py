@@ -2260,7 +2260,20 @@ html = f"""<!DOCTYPE html>
     .lvci-tablewrap{{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}}
     h1{{font-size:1.4em;margin:0 0 4px}}
     .sub{{color:var(--fg-muted);font-size:.85em;margin-bottom:20px}}
-    @media(max-width:820px){{.lvci-main{{padding:14px}}h1{{font-size:1.2em}}}}
+    @media(max-width:820px){{
+      .lvci-main{{padding:14px}}
+      h1{{font-size:1.2em}}
+      /* The revision table collapses to stacked cards (no horizontal scroll). */
+      .lvci-tablewrap{{overflow:visible}}
+      #cidash-table{{border:0}}
+      #cidash-table thead{{display:none}}
+      #cidash-table tbody,#cidash-table tr,#cidash-table td{{display:block;width:auto}}
+      #cidash-table tr{{border:1px solid var(--border);border-radius:10px;margin:0 0 12px;padding:8px 12px;background:var(--surface)}}
+      #cidash-table td{{border:0;padding:6px 0}}
+      #cidash-table td.cidash-rev{{max-width:none;padding:2px 0 8px;border-bottom:1px solid var(--border);margin-bottom:4px}}
+      #cidash-table td:not(.cidash-rev){{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left}}
+      #cidash-table td:not(.cidash-rev)::before{{content:attr(data-label);color:var(--fg-muted);font-size:.82em;font-weight:600}}
+    }}
     table{{border-collapse:collapse;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}}
     th{{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);color:var(--fg-muted);font-size:.8em;white-space:nowrap}}
     td{{border-bottom:1px solid var(--row-border);vertical-align:middle}}
@@ -2467,6 +2480,16 @@ html = f"""<!DOCTYPE html>
         applyFilter();
       }});
       applyFilter();
+    }})();
+
+    // Mobile cards: stamp each body cell with its column name so the responsive
+    // <=820px layout (table collapses to cards) can show the column label beside
+    // each value via CSS content:attr(data-label).
+    (() => {{
+      const ths = Array.from(document.querySelectorAll('#cidash-table > thead th')).map((t) => t.textContent.trim());
+      document.querySelectorAll('#cidash-table > tbody > tr').forEach((tr) => {{
+        Array.from(tr.children).forEach((td, i) => {{ if (ths[i]) td.setAttribute('data-label', ths[i]); }});
+      }});
     }})();
 
     // Column-visibility menu: a standard "Columns" dropdown of checkboxes that
