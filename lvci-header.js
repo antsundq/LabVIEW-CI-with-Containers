@@ -1015,18 +1015,40 @@
     var current = opts.current || ctx;
     var getSha = opts.getSha || function () { return cfg.sha; };
     var deferProbe = !!opts.deferProbe;   // VI Browser: sha is dynamic -> check at click time, not upfront
+    // In the VI Browser a ?lens= deep link means a report lens is active on load;
+    // start the picker on it so the dropdown matches the framed report.
+    if (deferProbe) { try { var _ql = new URLSearchParams(location.search).get('lens'); if (_ql && LENS_ORDER.indexOf(_ql) >= 0) current = _ql; } catch (e) {} }
     var wrap = document.createElement('div'); wrap.className = 'lvci-rev lvci-lens-ctx';
     var lbl = document.createElement('span'); lbl.className = 'lvci-revlbl'; lbl.textContent = 'Activity';
     var sel = document.createElement('select');
     sel.setAttribute('aria-label', 'Switch to another view of this revision');
-    LENS_ORDER.forEach(function (key) {
-      var label;
-      if (key === 'snapshots') { label = 'Snapshots'; }
-      else { var d = DOCTYPES[key]; if (!d) return; label = d.label; }
+    // Lenses grouped for scale (a flat list does not stay legible as activities grow):
+    // Code & changes (snapshots/diff) | Quality (the checks) | Artifacts (docs, ...).
+    var LENS_GROUPS = [
+      { label: 'Code & changes', keys: ['snapshots'] },
+      { label: 'Quality',        keys: ['masscompile-report', 'vi-analyzer-report', 'unit-tests-report'] },
+      { label: 'Artifacts',      keys: ['antidoc-report'] }
+    ];
+    function lensLabel(key) {
+      if (key === 'snapshots') return 'Snapshots';
+      var d = DOCTYPES[key]; return d ? d.label : null;
+    }
+    function addOpt(parent, key) {
+      var label = lensLabel(key); if (!label) return;
       var o = document.createElement('option'); o.value = key; o.textContent = label;
       if (key === current) o.selected = true;
-      sel.appendChild(o);
+      parent.appendChild(o);
+    }
+    var placed = {};
+    LENS_GROUPS.forEach(function (g) {
+      var keys = g.keys.filter(function (k) { return LENS_ORDER.indexOf(k) >= 0 && lensLabel(k); });
+      if (!keys.length) return;
+      var og = document.createElement('optgroup'); og.label = g.label;
+      keys.forEach(function (k) { addOpt(og, k); placed[k] = 1; });
+      sel.appendChild(og);
     });
+    // Any lens not assigned to a group (future-proofing) -> ungrouped, in order.
+    LENS_ORDER.forEach(function (key) { if (!placed[key]) addOpt(sel, key); });
     sel.value = current;
     var note = document.createElement('span'); note.style.cssText = 'font-size:11px;color:#8b949e;white-space:nowrap';
     // Switch lens. A page that can host a lens in its OWN pane (the VI Browser
