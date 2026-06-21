@@ -59,10 +59,38 @@ jobs:
           echo "ref=${REF:-v1}" >> "$GITHUB_OUTPUT"
           echo "Capability version (source.ref) this repo opted into: ${REF:-v1}"
 
+  # 1b) Dependency gate. If this revision changed a monitored .vipc (or any other
+  #     worker input), the worker image must be rebuilt with the new dependencies
+  #     BEFORE the container activities run against it. This job blocks on the
+  #     worker image build(s) for this SHA; the activities below that consume the
+  #     custom worker image depend on it. No worker-affecting change => the helper
+  #     exits immediately. A repo without the custom-image capability has no helper
+  #     script, so the gate is skipped.
+  gate-images:
+    needs: config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Wait for worker image rebuild (dependency gate)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f .github/labview/wait-for-worker-images.sh ]; then
+            bash .github/labview/wait-for-worker-images.sh \
+              --sha "${{ github.sha }}" \
+              --before "${{ github.event.before }}" \
+              --repo "${{ github.repository }}"
+          else
+            echo "wait-for-worker-images.sh not present; skipping container dependency gate."
+          fi
+
   # 2) Each activity job runs only when its capability is active AND the platform
   #    is selected. Changing either in Configure Workers flips these gates.
   mass-compile:
-    needs: config
+    needs: [config, gate-images]
     if: ${{ needs.config.outputs.has-masscompile == 'true' && needs.config.outputs.os-windows == 'true' }}
     runs-on: ${{ inputs.windows-runner }}
     permissions:
@@ -164,7 +192,7 @@ jobs:
   # commit status so the caller's dashboard shows the result. Requires the custom
   # LabVIEW CI image (built by the consumer's build-labview-image workflow).
   vi-analyzer:
-    needs: config
+    needs: [config, gate-images]
     if: ${{ needs.config.outputs.has-vi-analyzer == 'true' && needs.config.outputs.os-windows == 'true' }}
     runs-on: ${{ inputs.windows-runner }}
     permissions:
@@ -299,7 +327,7 @@ jobs:
   # base and head commits, deploys them to the caller's Pages, and posts the
   # "CI / VIDiff" status. Runs on the NI base image (no custom image needed).
   vidiff:
-    needs: config
+    needs: [config, gate-images]
     if: ${{ needs.config.outputs.has-vidiff == 'true' && needs.config.outputs.os-windows == 'true' }}
     runs-on: ${{ inputs.windows-runner }}
     permissions:

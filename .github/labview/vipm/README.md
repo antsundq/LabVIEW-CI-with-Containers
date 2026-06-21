@@ -29,7 +29,7 @@ false "no unit tests found".
 
 ```mermaid
 flowchart LR
-  A[".vipc staged<br/>(repo root or .github/labview/vipm/)"] --> B["build-labview-image.yml<br/>copies *.vipc into .github/labview/vipm/"]
+  A[".vipc anywhere in the repo<br/>(discovered recursively, outside .github/)"] --> B["build-labview-image.yml<br/>copies project *.vipc into .github/labview/vipm/"]
   B --> C["labview-vipm-base.Dockerfile<br/>builds/pulls LabVIEW + VIPM + Git base"]
   C --> D["labview-vipc-layer.Dockerfile<br/>COPY .github/labview/vipm/ -> C:/vipm/"]
   D --> E["Dockerfile runs install-vipc.ps1<br/>when any *.vipc is present"]
@@ -50,8 +50,14 @@ pushed `ghcr.io/elijah286/labview-ci-with-containers-labview:2026` plus the
 VIPC changes are applied on top as a project dependency layer.
 
 A repository that "features a `.vipc`" therefore gets that configuration baked
-into the Windows worker automatically — the build workflow copies any repo-root
-`*.vipc` (e.g. `COTC Dependencies.vipc`) into this folder before building.
+into the Windows worker automatically — the build workflow copies any project
+`*.vipc` found anywhere in the repo (recursively, outside `.github/`) into this
+folder before building. The container-based CI activities (VI Analyzer, Mass
+Compile, Unit Tests, Antidoc, VIDiff) then **wait** for that worker image rebuild
+to finish — via `.github/labview/wait-for-worker-images.sh` — before they pull the
+image and run, so they never execute against a worker that is missing a project
+dependency. The `ci-tooling.vipc` distributed by the tooling is the **base**
+configuration applied first; a project's own discovered VIPC files stack on top.
 
 To add **custom** project dependencies: commit a `.vipc` (made in the VIPM
 editor, or generated like `ci-tooling.vipc`) at the repo root or under

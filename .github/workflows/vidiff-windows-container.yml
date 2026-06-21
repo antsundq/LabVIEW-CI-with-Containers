@@ -106,6 +106,26 @@ jobs:
           git fetch --no-tags origin main
           git checkout FETCH_HEAD -- .github/labview .github/workflows
 
+      # Dependency gate: if the head revision changed a monitored .vipc (or any other
+      # worker input), block until the worker image rebuild for that SHA finishes,
+      # so VIDiff never renders against a container missing project dependencies.
+      # No worker-affecting change => the helper exits immediately. No helper present
+      # (repo without the custom-image capability) => skip.
+      - name: Wait for worker image rebuild (dependency gate)
+        shell: bash
+        working-directory: head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f .github/labview/wait-for-worker-images.sh ]; then
+            bash .github/labview/wait-for-worker-images.sh \
+              --sha "${{ steps.shas.outputs.head }}" \
+              --before "${{ steps.shas.outputs.base }}" \
+              --repo "${{ github.repository }}"
+          else
+            echo "wait-for-worker-images.sh not present; skipping container dependency gate."
+          fi
+
       - name: Get list of changed VI/CTL files
         id: changed
         shell: bash

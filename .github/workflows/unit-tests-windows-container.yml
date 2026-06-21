@@ -106,6 +106,25 @@ jobs:
           git fetch --no-tags origin main
           git checkout FETCH_HEAD -- .github/labview .github/workflows
 
+      # Dependency gate: if this revision changed a monitored .vipc (or any other
+      # worker input), block until the worker image rebuild for this SHA finishes,
+      # so Unit Tests never run against a container missing project dependencies.
+      # No worker-affecting change => the helper exits immediately. No helper present
+      # (repo without the custom-image capability) => skip.
+      - name: Wait for worker image rebuild (dependency gate)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f .github/labview/wait-for-worker-images.sh ]; then
+            bash .github/labview/wait-for-worker-images.sh \
+              --sha "${{ steps.sha.outputs.sha }}" \
+              --before "${{ github.event.before }}" \
+              --repo "${{ github.repository }}"
+          else
+            echo "wait-for-worker-images.sh not present; skipping container dependency gate."
+          fi
+
       # Per-action container selection: config.container.actions.unit-tests wins,
       # then config.container.use. With neither set, default to the custom worker
       # image at the version tag (its baked Caraya/VI Tester/UTF are required to

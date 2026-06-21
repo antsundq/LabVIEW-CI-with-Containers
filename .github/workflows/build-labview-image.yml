@@ -184,7 +184,9 @@ jobs:
       # .github/labview-ci.yml lists config.container.vipc entries, exactly those
       # files are baked, so the Configure dialog can choose which dependencies apply
       # and a VIPC can live anywhere in the repo (not just the root). With no list,
-      # every repo-root *.vipc is baked (the original behavior).
+      # every project *.vipc found ANYWHERE in the repo (recursively, excluding the
+      # tooling dir under .github/) is baked -- VIPC files are the source of truth
+      # for project dependencies, so they are all discovered and applied by default.
       - name: Stage repo VIPC files
         shell: bash
         run: |
@@ -209,7 +211,10 @@ jobs:
                   elif in_c and re.match(r'^\S', line):
                       in_c = False
           if not paths:
-              paths = sorted(glob.glob('*.vipc'))
+              paths = sorted(
+                  p for p in glob.glob('**/*.vipc', recursive=True)
+                  if not p.replace(os.sep, '/').startswith('.github/')
+              )
           staged = 0
           for p in paths:
               if os.path.isfile(p):
