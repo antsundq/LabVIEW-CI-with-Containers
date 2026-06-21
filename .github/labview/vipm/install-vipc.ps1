@@ -650,6 +650,10 @@ try {
         # file, including transitive dependencies, rather than us parsing names.
         Write-Host "  Installing from file: vipm install -y '$($vipc.Name)'"
         $rc = Invoke-VipmInstall '-y' $vipc.FullName
+        if ($rc -eq 0 -and $script:LastVipmOutput -match 'No packages were installed') {
+            Write-Warning "  VIPM accepted '$($vipc.Name)' but reported that no packages were installed; falling back to package-level install."
+            $rc = 42
+        }
         if ($rc -eq 0) { continue }
 
         # ONLY the genuine "wait for VIPM startup" timeout means the VIPM engine
