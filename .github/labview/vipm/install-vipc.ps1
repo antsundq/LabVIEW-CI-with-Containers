@@ -67,6 +67,16 @@ $Env:VIPM_DEBUG             = if ($null -ne $Env:VIPM_DEBUG -and $Env:VIPM_DEBUG
 # abort a cold headless LabVIEW. (VIPM_TIMEOUT still overrides the actual value.)
 if (-not $Env:CI)             { $Env:CI = 'true' }
 if (-not $Env:GITHUB_ACTIONS)  { $Env:GITHUB_ACTIONS = 'true' }
+# VIPM has "several ways" to decide a repo is public, INCLUDING the environment
+# (per JKI). In GitHub Actions these are set automatically, but inside `docker
+# build` they are absent, so derive them from the public repo URL and export them
+# for VIPM's environment-based public-repo detection. (Owner/name parsed from
+# https://github.com/<owner>/<name>.git.) Do not clobber values already present.
+if ($PublicRepoUrl -match 'github\.com[:/]+(?<owner>[^/]+)/(?<name>[^/]+?)(?:\.git)?/?$') {
+    if (-not $Env:GITHUB_SERVER_URL)       { $Env:GITHUB_SERVER_URL = 'https://github.com' }
+    if (-not $Env:GITHUB_REPOSITORY)        { $Env:GITHUB_REPOSITORY = "$($Matches.owner)/$($Matches.name)" }
+    if (-not $Env:GITHUB_REPOSITORY_OWNER) { $Env:GITHUB_REPOSITORY_OWNER = $Matches.owner }
+}
 # Bound the per-operation timeout. During `docker build` the GITHUB_ACTIONS / CI
 # env vars are NOT present, so VIPM does not apply its longer "CI" default timeouts
 # and its short defaults (check_for_updates ~270s, library_list ~330s) can abort a
@@ -397,6 +407,21 @@ try {
     $installWorkdir = New-PublicRepoWorkdir $PublicRepoUrl
     Write-Host "Running VIPM installs from a public-repo context (origin=$PublicRepoUrl) to satisfy Community Edition."
     Set-Location $installWorkdir
+
+    # Diagnostic (per JKI): show what `git` reports from the EXACT directory vipm
+    # runs in - this is one of the signals VIPM uses to decide the repo is public.
+    # If these don't show a clean working tree with a public origin remote, VIPM's
+    # public-repo detection can't succeed regardless of anything else.
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        Write-Host "--- git context for VIPM (cwd=$installWorkdir) ---"
+        Write-Host '$ git status'
+        & git status 2>&1 | Out-Host
+        Write-Host '$ git remote -v'
+        & git remote -v 2>&1 | Out-Host
+        Write-Host '$ git rev-parse HEAD'
+        & git rev-parse HEAD 2>&1 | Out-Host
+        Write-Host '--- end git context ---'
+    }
 
     # Force a full re-download of the package spec index. A fresh headless VIPM in a
     # container starts with an empty CLI spec cache (C:\ProgramData\JKI\VIPM\cache);
