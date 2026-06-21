@@ -780,6 +780,8 @@ function vb2BlobOf(url) { const m = String(url || '').match(/([0-9a-f]{40})\.htm
 function vb2WinAvail(blob) { return !!(json2WinSet && blob && json2WinSet.has(blob)); }
 function vb2EffPlat(_htmlUrl) { return vb2Plat === 'windows' ? 'windows' : 'linux'; }
 function vb2JsonUrl(htmlUrl) { return htmlUrl.replace(/\.html$/i, vb2EffPlat(htmlUrl) === 'windows' ? '.windows.json' : '.json'); }
+function vb2FrameHasImage(frame) { return !!(frame && (frame.Image || frame['Base64 Image'] || frame.base64 || frame.ImageFile)); }
+function vb2HasDrawableFrames(frames) { return Array.isArray(frames) && frames.some(vb2FrameHasImage); }
 
 let lvController = null;
 function openSnapshot(htmlUrl, title) {
@@ -793,7 +795,7 @@ function openSnapshot(htmlUrl, title) {
   fetch(jsonUrl, { cache: 'no-store' })
     .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
     .then(frames => {
-      if (!window.LVRender || !Array.isArray(frames) || !frames.length) throw new Error('no frames');
+      if (!window.LVRender || !vb2HasDrawableFrames(frames)) throw new Error('no drawable frames');
       setViewerModeNote('');
       showInPlace(frames, htmlUrl, title);
     })
@@ -904,7 +906,8 @@ function showNeedsToken(htmlUrl, title) {
   setViewerLoading(false);
   // Let the 2.0 controller pick the right panel (no render yet / running /
   // no-frames / failed). It owns the repo + run-status + dispatch logic.
-  window.__lvciVB2Context = { platform: vb2Plat, sha: (commitSelect && commitSelect.value) || '', vi: openViRel || '' };
+  const revSelect = document.getElementById('commit-select');
+  window.__lvciVB2Context = { platform: vb2Plat, sha: (revSelect && revSelect.value) || '', vi: openViRel || '' };
   try { if (window.__lvciVB2 && window.__lvciVB2.resolve) window.__lvciVB2.resolve(title, window.__lvciVB2Context); } catch (e) {}
 }
 
