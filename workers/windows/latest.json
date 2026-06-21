@@ -1,7 +1,7 @@
 ﻿{
-    "version":  "win-d1ed5230bd54",
+    "version":  "win-4ea5923af1a7",
     "platform":  "windows",
-    "manifest_url":  "https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-d1ed5230bd54/manifest.html",
-    "build_date":  "2026-06-21T03:48:36Z",
-    "git_sha":  "4a8204ae5e30db73eec909c78344d2ccac3fdd82"
+    "manifest_url":  "https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/windows/win-4ea5923af1a7/manifest.html",
+    "build_date":  "2026-06-21T05:00:43Z",
+    "git_sha":  "cb7e4c00660ffafc19ca4b5e3f5b9593329be9db"
 }
