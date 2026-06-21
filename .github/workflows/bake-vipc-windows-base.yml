@@ -17,6 +17,10 @@ on:
         description: 'Also move :latest to this verified image'
         type: boolean
         default: false
+      rebuild_vipm_base:
+        description: 'Force rebuild and push the shared LabVIEW+VIPM base before applying the VIPC'
+        type: boolean
+        default: false
 
 env:
   DEFAULT_TAG: ${{ vars.LABVIEW_VERSION || '2026' }}
@@ -111,21 +115,56 @@ jobs:
           $hashTag = "$movingTag-${{ steps.vipc.outputs.vipc_hash }}"
           $workerVersion = "win-vipc-${{ steps.vipc.outputs.vipc_hash }}"
           $projectTag = '${{ env.DEFAULT_TAG }}'
+          $vipmBase = "$base-vipm-base"
 
           "base=$base" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "vipm_base_ref=${vipmBase}:$projectTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "vipm_base_latest=${vipmBase}:latest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "project_ref=${base}:$projectTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "moving_ref=${base}:$movingTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "hash_ref=${base}:$hashTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "worker_version=$workerVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "VIPM base image: ${vipmBase}:$projectTag"
           Write-Host "Project base tag: ${base}:$projectTag"
           Write-Host "Moving tag: ${base}:$movingTag"
           Write-Host "Immutable VIPC tag: ${base}:$hashTag"
           Write-Host "Worker version: $workerVersion"
 
+      - name: Pull or build LabVIEW VIPM base image
+        shell: powershell
+        run: |
+          $baseRef = '${{ steps.image.outputs.vipm_base_ref }}'
+          $latestRef = '${{ steps.image.outputs.vipm_base_latest }}'
+          $rebuild = '${{ github.event.inputs.rebuild_vipm_base || 'false' }}' -eq 'true'
+
+          if (-not $rebuild) {
+            Write-Host "Pulling existing VIPM base image: $baseRef"
+            docker pull $baseRef
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "VIPM base image was not available; it will be built once and pushed."
+              $rebuild = $true
+            }
+          }
+
+          if ($rebuild) {
+            Write-Host "Building shared LabVIEW+VIPM base image: $baseRef"
+            docker build -f .github/docker/labview-vipm-base.Dockerfile `
+              -t $baseRef `
+              -t $latestRef .
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+            foreach ($ref in @($baseRef, $latestRef)) {
+              Write-Host "Pushing $ref"
+              docker push $ref
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+          }
+
       - name: Build VIPC-baked Windows image
         shell: powershell
         run: |
           $base = '${{ steps.image.outputs.base }}'
+          $vipmBaseRef = '${{ steps.image.outputs.vipm_base_ref }}'
           $projectRef = '${{ steps.image.outputs.project_ref }}'
           $movingRef = '${{ steps.image.outputs.moving_ref }}'
           $hashRef = '${{ steps.image.outputs.hash_ref }}'
@@ -135,7 +174,8 @@ jobs:
           if ('${{ inputs.push_latest }}' -eq 'true') { $tags += "${base}:latest" }
           $tagFlags = ($tags | ForEach-Object { '-t', $_ })
 
-          docker build -f .github/docker/labview-ci.Dockerfile `
+          docker build -f .github/docker/labview-vipc-layer.Dockerfile `
+            --build-arg VIPM_BASE_IMAGE=$vipmBaseRef `
             --build-arg CI_WORKER_VERSION=$workerVersion `
             --build-arg VIPM_PUBLIC_REPO_URL=$repoUrl `
             @tagFlags .
@@ -182,6 +222,7 @@ jobs:
         run: |
           "### VIPC-baked Windows image published" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           "- VIPC: `${{ inputs.vipc_path }}`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "- VIPM base image: `${{ steps.image.outputs.vipm_base_ref }}`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           "- Project base tag: `${{ steps.image.outputs.project_ref }}`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           "- Moving tag: `${{ steps.image.outputs.moving_ref }}`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           "- Immutable VIPC tag: `${{ steps.image.outputs.hash_ref }}`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

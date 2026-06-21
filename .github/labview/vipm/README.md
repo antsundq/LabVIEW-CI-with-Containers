@@ -18,7 +18,7 @@ false "no unit tests found".
 
 | File | Role |
 | --- | --- |
-| `install-vipc.ps1` | Build-time hook. Finds/installs the VIPM CLI, launches headless LabVIEW, then installs the packages listed in every staged `*.vipc`. A failed bake fails the image build unless `VIPM_ALLOW_MISSING_PACKAGES=1` is explicitly set. |
+| `install-vipc.ps1` | Build-time hook. Uses the VIPM CLI already present in the shared VIPM base image, launches headless LabVIEW, then installs the packages listed in every staged `*.vipc`. A failed bake fails the image build unless `VIPM_ALLOW_MISSING_PACKAGES=1` is explicitly set. |
 | `ci-tooling.vipc` | The default CI-tooling configuration (Antidoc CLI, Caraya, VI Tester, UTF JUnit Report). Generated from the two JSON files below. |
 | `ci-tooling.packages.json` / `ci-tooling.defaults.json` | Inputs used by `build-tooling-vipc.py` to (re)generate `ci-tooling.vipc`. |
 | `build-tooling-vipc.py` | Regenerates `ci-tooling.vipc` from the JSON inputs. |
@@ -30,11 +30,16 @@ false "no unit tests found".
 ```mermaid
 flowchart LR
   A[".vipc staged<br/>(repo root or .github/labview/vipm/)"] --> B["build-labview-image.yml<br/>copies *.vipc into .github/labview/vipm/"]
-  B --> C["labview-ci.Dockerfile<br/>COPY .github/labview/vipm/ -> C:/vipm/"]
-  C --> D["Dockerfile installs VIPM 2026 Q3<br/>(silent /exenoui /qn)"]
+  B --> C["labview-vipm-base.Dockerfile<br/>builds/pulls LabVIEW + VIPM + Git base"]
+  C --> D["labview-vipc-layer.Dockerfile<br/>COPY .github/labview/vipm/ -> C:/vipm/"]
   D --> E["Dockerfile runs install-vipc.ps1<br/>when any *.vipc is present"]
   E --> F["packages baked into vi.lib /<br/>user.lib of the image"]
 ```
+
+The expensive, slow-moving tooling layer is published separately as
+`ghcr.io/<owner>/<repo>-labview-vipm-base:<labview-year>`. That image already
+contains VIPM 2026 Q3 and Git. Project worker rebuilds start from it and only
+apply the staged VIPC files, so changing a dependency set does not reinstall VIPM.
 
 A repository that "features a `.vipc`" therefore gets that configuration baked
 into the Windows worker automatically — the build workflow copies any repo-root
