@@ -716,6 +716,12 @@ try {
         }
     }
 
+    # Apply REQUIRED (project) VIPCs before BEST-EFFORT tooling VIPCs (ci-tooling*).
+    # A best-effort add-on (Antidoc) can wedge the headless VIPM engine, so it must
+    # run LAST - otherwise it would kill the engine before a required project VIPC
+    # (the OpenG / domain dependencies the project's VIs load against) gets to apply.
+    $vipcFiles = @($vipcFiles | Sort-Object @{ Expression = { if ($_.Name -like 'ci-tooling*') { 1 } else { 0 } } }, Name)
+
     foreach ($vipc in $vipcFiles) {
         # Tooling VIPCs (ci-tooling*.vipc) carry opportunistic add-ons (Antidoc,
         # Caraya, VI Tester). Antidoc's heavy dependency tree can wedge the headless
