@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.31.0",
+  "version": "3.32.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.32.0",
+        "date": "2026-06-20",
+        "title": "Settings pages share a sub-navigation, so the configuration sections feel like one area",
+        "summary": "The per-repo configuration pages -- Configure Workers, VI Analyzer, and Unit Testing -- now show a Settings sub-navigation strip in the context bar directly under the header, with the section you are on marked. Previously each was an isolated page you could only reach by reopening the Settings menu; now they read as one Settings area you can move through in a click, matching how the Revision and Activity bars work on the other surfaces. The Settings item in the top navigation already highlights while you are on any of these pages.",
+        "highlights": [
+          "Configure Workers, VI Analyzer, and Unit Testing now share a Settings sub-navigation with the current section marked.",
+          "The sub-navigation sits in the same context bar used for the Revision / Activity controls elsewhere, for a consistent layout.",
+          "Shared header asset only -- every configuration page gets it automatically, on the source site and consumer dashboards."
+        ]
+      },
       {
         "version": "3.31.0",
         "date": "2026-06-20",
