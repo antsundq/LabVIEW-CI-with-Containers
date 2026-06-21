@@ -4,7 +4,13 @@ set -euo pipefail
 sha=""
 before=""
 repo="${GITHUB_REPOSITORY:-}"
-workflows=("Build LabVIEW CI Image" "Build LabVIEW CI Image - Linux")
+# Workflows to wait for. Left empty here and defaulted AFTER arg parsing so that an
+# explicit --workflow REPLACES the default rather than appending to it. The default
+# is the WINDOWS worker build only: every activity that uses this gate is a
+# Windows-container activity, so it must not block on the Linux worker build (which
+# may not run for a given revision). A Linux activity should pass
+# --workflow "Build LabVIEW CI Image - Linux".
+workflows=()
 appear_timeout=300
 overall_timeout=2400
 
@@ -32,6 +38,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ -z "$sha" ]; then sha="${GITHUB_SHA:-}"; fi
+if [ "${#workflows[@]}" -eq 0 ]; then workflows=("Build LabVIEW CI Image"); fi
 if [ -z "$sha" ]; then echo "No target SHA supplied." >&2; exit 2; fi
 if [ -z "$repo" ]; then echo "No GitHub repository supplied." >&2; exit 2; fi
 if [ -z "${GH_TOKEN:-}" ]; then echo "GH_TOKEN is required to query workflow runs." >&2; exit 2; fi
@@ -82,7 +89,15 @@ while :; do
     echo "  $wf: status=${status:-unknown} conclusion=${conclusion:-none} ${url}"
     if [ "$status" != "completed" ]; then
       all_done=false
-    elif [ "$conclusion" != "success" ] && [ "$conclusion" != "skipped" ]; then
+    elif [ "$conclusion" = "success" ] || [ "$conclusion" = "skipped" ]; then
+      : # build is current for this revision - good to proceed
+    elif [ "$conclusion" = "cancelled" ]; then
+      # A cancelled build was superseded or manually stopped - it does NOT mean the
+      # published image is bad (a later build/bake may have produced it). Don't hard
+      # fail an activity (e.g. a re-run on an older commit) over a cancelled build;
+      # warn and proceed. Re-run the worker build if you suspect the image is stale.
+      echo "::warning::Worker image build for '$wf' at $sha was cancelled; proceeding without blocking. Re-run the worker build if the image may be stale."
+    else
       echo "Worker image build failed: $wf concluded '$conclusion'." >&2
       exit 1
     fi
