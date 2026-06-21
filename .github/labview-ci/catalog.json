@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.30.0",
+  "version": "3.31.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.31.0",
+        "date": "2026-06-20",
+        "title": "In-pane reports gain a Back-to-VIs link, a one-click full report, and a loading state",
+        "summary": "Polishing the unified Explorer: when a report (Mass Compile, VI Analyzer, Unit Tests, Antidoc) is framed in the VI Browser pane, a small bar above it now offers a Back to VIs link (one click back to the project tree), an Open full report link that opens the standalone report viewer -- where Regenerate / Re-run and the raw report live -- and a brief loading indicator while the report loads. The framed report also carries an accessible, report-specific title, and the bar wraps gracefully on narrow screens.",
+        "highlights": [
+          "Back to VIs returns from a framed report to the project tree in one click.",
+          "Open full report opens the report viewer with its Regenerate / Re-run and raw-report controls.",
+          "Added a loading indicator and an accessible per-report title for the framed report."
+        ]
+      },
       {
         "version": "3.30.0",
         "date": "2026-06-20",
