@@ -1,11 +1,21 @@
 {
   "schemaVersion": 1,
-  "version": "3.29.0",
+  "version": "3.30.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.30.0",
+        "date": "2026-06-20",
+        "title": "Activity switcher: grouped lenses and a deep-link that opens on the right one",
+        "summary": "The Activity switcher (in the VI Browser and report context bars) now groups its lenses -- Code & changes, Quality, and Artifacts -- so the list stays legible as more activities are added, instead of one long flat menu. Opening a shared VI Browser link that points at a report (a lens parameter in the URL) now also starts the Activity dropdown on that report, so the menu matches the framed view from the first paint.",
+        "highlights": [
+          "Activity lenses are grouped (Code & changes / Quality / Artifacts) for a switcher that scales.",
+          "A report deep link now selects the matching entry in the Activity dropdown on load."
+        ]
+      },
       {
         "version": "3.29.0",
         "date": "2026-06-20",
