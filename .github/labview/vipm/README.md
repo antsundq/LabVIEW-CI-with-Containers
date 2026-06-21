@@ -41,6 +41,14 @@ The expensive, slow-moving tooling layer is published separately as
 contains VIPM 2026 Q3 and Git. Project worker rebuilds start from it and only
 apply the staged VIPC files, so changing a dependency set does not reinstall VIPM.
 
+Validated proof path (2026-06-21): the manual `bake-vipc-windows-base.yml` run
+created/pulled `ghcr.io/elijah286/labview-ci-with-containers-labview-vipm-base:2026`,
+built the thin VIPC layer from `example/Dependencies.vipc`, verified the seven
+expected packages with `vipm list --installed` inside the resulting image, and
+pushed `ghcr.io/elijah286/labview-ci-with-containers-labview:2026` plus the
+`vipc-base` tags. In other words, the Windows base image now stores VIPM/Git;
+VIPC changes are applied on top as a project dependency layer.
+
 A repository that "features a `.vipc`" therefore gets that configuration baked
 into the Windows worker automatically — the build workflow copies any repo-root
 `*.vipc` (e.g. `COTC Dependencies.vipc`) into this folder before building.
@@ -209,9 +217,14 @@ changed shape vs. the older `2026.1.0` build — mind the differences:**
 - `-y` / `--yes` **does** exist in 26.3 (skips the confirm prompt when installing
   **from a file**), but the script relies on the `VIPM_NONINTERACTIVE` /
   `VIPM_ASSUME_YES` env vars instead, so it isn't needed.
-- The `config.xml`-only `.vipc` produced by `build-tooling-vipc.py` is **not**
-  reliably accepted by `vipm install <file.vipc>` directly, so the script parses
-  the package names out of the `.vipc` and installs each **by name**.
+- The `config.xml`-only `.vipc` produced by VIPM/project tooling is **not**
+  reliably accepted by `vipm install <file.vipc>` directly in a Windows Server
+  Core build. VIPM can return exit `0` while printing `No packages were installed`.
+  Treat that as a failed/no-op apply. The script then parses package names out of
+  the `.vipc`, tries by-name installs, and finally falls back to direct public
+  index downloads plus local `.vip` / `.ogp` file installs. The local-file install
+  path is the one that successfully verified the OpenG dependency VIPC in the
+  container.
 
 ---
 
@@ -245,6 +258,7 @@ changed shape vs. the older `2026.1.0` build — mind the differences:**
 | `Operation 'VIPM command 'library_list'' timed out after 330s` | Short build-time timeout and/or an old CLI. Use VIPM 26.3+ and raise `VIPM_TIMEOUT`. |
 | `error: unexpected argument '--refresh' found` (exit 2) | 26.3 removed `--refresh` from `install`. Run the standalone `vipm refresh` first; don't pass `--refresh` to `install`. |
 | `error: unexpected argument '--labview-version' found` (exit 2) | Global options must go **before** the `install` subcommand: `vipm --labview-version 2026 install <pkgs>`. The script also falls back to the bare form (active target from `Settings.ini`). |
+| `Applying VI Package Configuration ...` followed by `No packages were installed` with exit 0 | Treat it as a no-op failure, not success. The script forces fallback to parsed package specs and then local public-index package files. |
 | Package install reports "not found" | In Free/Community Windows containers this usually means VIPM's resolver index is empty even after `refresh`. The script falls back to direct public-index `.vip` / `.ogp` downloads and local-file installs; if that also fails, check package URLs, MD5s, and whether the package is in a custom/private repo. |
 
 ---
