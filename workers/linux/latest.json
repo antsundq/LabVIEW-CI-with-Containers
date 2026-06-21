@@ -2,6 +2,6 @@
   "version": "linux-c6484cf4d66a",
   "platform": "linux",
   "manifest_url": "https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/linux/linux-c6484cf4d66a/manifest.html",
-  "build_date": "2026-06-19T16:55:53Z",
-  "git_sha": "12553d67f22d02885acfd455c1d68381e8702aca"
+  "build_date": "2026-06-21T14:59:04Z",
+  "git_sha": "eb2240d106503d2e207374ae8e0c7119af656a45"
 }
