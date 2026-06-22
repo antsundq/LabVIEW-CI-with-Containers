@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "ef19a2650ed701376267b7eaf8ae5e38db085283",
+  "sha": "497ba76eb8285e398eed71cd0b5a6cf2a6409f44",
   "revisions": [
+    {
+      "sha": "497ba76eb8285e398eed71cd0b5a6cf2a6409f44",
+      "short": "497ba76",
+      "message": "Robust fresh install: auto-build the worker image, wait for it, fix non-markdown README (v3.36.0)",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T16:28:45Z"
+    },
     {
       "sha": "ef19a2650ed701376267b7eaf8ae5e38db085283",
       "short": "ef19a26",
@@ -695,13 +702,6 @@
       "message": "dashboard: merge revision columns into one rich Revision cell (v3.13.1)",
       "author": "Elijah Kerry",
       "date": "2026-06-20T00:10:01Z"
-    },
-    {
-      "sha": "fe9ab462a4e02f9feb261e297358e923fe6b1ff3",
-      "short": "fe9ab46",
-      "message": "dashboard: add search + status filter to the revision table (v3.13.0)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-20T00:03:41Z"
     },
     {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
