@@ -25,7 +25,7 @@ param(
     [string] $CacheDir      = 'C:\lvctl-cache',           # where lvctl extracts its embedded VIs
     [string] $RenderTimeout = '5m',                       # per-VI lvctl timeout
     [string] $LabVIEWPath   = '',                         # optional explicit LabVIEW.exe
-    [int]    $ComReadySeconds = 240                       # how long to wait for COM-ready LabVIEW
+    [int]    $ComReadySeconds = 600                       # how long to wait for COM-ready LabVIEW
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
@@ -85,6 +85,7 @@ Write-Host "  Worklist    : $Worklist  (exists: $(Test-Path $Worklist))"
 Write-Host "  OutByBlob   : $OutByBlob"
 Write-Host "  lvctl.exe   : $Lvctl  (exists: $(Test-Path $Lvctl))"
 Write-Host "  runner.exe  : $Runner (exists: $(Test-Path $Runner))"
+Write-Host "  COM wait    : ${ComReadySeconds}s"
 
 New-Item -ItemType Directory -Force -Path $OutByBlob | Out-Null
 New-Item -ItemType Directory -Force -Path $CacheDir  | Out-Null

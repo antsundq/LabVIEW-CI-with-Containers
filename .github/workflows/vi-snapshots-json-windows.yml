@@ -177,8 +177,11 @@ jobs:
               -OutByBlob 'C:\out\by-blob' `
               -Lvctl     'C:\repo\_winbin\lvctl.exe' `
               -Runner    'C:\repo\_winbin\runner.exe' `
-              -RenderTimeout '${{ github.event.inputs.render_timeout }}'
-            Write-Host "render exit code: $LASTEXITCODE"
+                -RenderTimeout '${{ github.event.inputs.render_timeout }}' `
+                -ComReadySeconds 600
+              $renderExit = $LASTEXITCODE
+              Write-Host "render exit code: $renderExit"
+              if ($renderExit -ne 0) { throw "Windows VI Browser 2.0 render failed with exit code $renderExit" }
 
             New-Item -ItemType Directory -Force -Path "$repo\_winout\by-blob" | Out-Null
             docker cp "${name}:C:\out\by-blob\." "$repo\_winout\by-blob" 2>$null
