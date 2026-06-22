@@ -2810,6 +2810,12 @@ def _build_dependencies_index():
   for col in columns:
     tag = col.get('tag') or config.get('actions', {}).get(col['action']) or config.get('use') or col.get('defaultTag') or 'base'
     col['tag'] = tag
+    if col.get('platform') == 'linux':
+      col['ready'] = True
+      col['packages'] = []
+      col['version'] = 'pending'
+      col['unsupported'] = True
+      continue
     if tag not in ('base', 'none'):
       cache_key = f"{col['platform']}:{tag}"
       if cache_key not in manifest_cache:
