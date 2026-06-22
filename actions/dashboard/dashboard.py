@@ -18,7 +18,7 @@ def gh_get(path):
         'X-GitHub-Api-Version': '2022-11-28',
     })
     try:
-        with urllib.request.urlopen(req) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
         print(f"  HTTP {e.code} for {path}", file=sys.stderr)

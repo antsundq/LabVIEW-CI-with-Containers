@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.34.22",
+  "version": "3.34.23",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.34.23",
+        "date": "2026-06-22",
+        "title": "Dashboard builds time out stalled GitHub API reads",
+        "summary": "The dashboard generator now gives GitHub API reads a bounded timeout, matching the existing timeout used for Pages JSON reads. This prevents a stalled API request from leaving the dashboard publish step running indefinitely while preserving the dependency-source table update from the previous release.",
+        "highlights": [
+          "Adds a 20-second timeout to dashboard GitHub API requests.",
+          "Lets a fresh dashboard publish cancel and replace a stuck dashboard-pages run through the existing workflow concurrency group.",
+          "Keeps the new VIPM, NI Package Manager installed dependencies, and System Components tables intact."
+        ]
+      },
       {
         "version": "3.34.22",
         "date": "2026-06-22",
