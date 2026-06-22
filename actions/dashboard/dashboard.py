@@ -634,12 +634,8 @@ for c in commits_data:
     if not is_project:
         mc_badge = EMPTY_CELL
     else:
-        _mc_run = fresh_pending('CI / Mass Compile')
         _mc = masscompile_summary(sha)
-        if _mc_run is not None:
-            caps_ran.add('masscompile')
-            mc_badge = running_cell('compile', _mc_run.get('target_url', ''))
-        elif _mc and isinstance(_mc.get('percent'), int):
+        if _mc and isinstance(_mc.get('percent'), int):
             any_output['on'] = True
             caps_ran.add('masscompile')
             _pct = _mc['percent']
