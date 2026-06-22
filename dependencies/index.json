@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "repo": "elijah286/LabVIEW-CI-with-Containers",
+  "sha": "5019c35ccba6faf7620685449cc995b8c24ff263",
+  "config": {
+    "use": "",
+    "actions": {},
+    "vipc": []
+  },
+  "vipc": [
+    {
+      "path": "example/Dependencies.vipc",
+      "configured": false,
+      "packages": [
+        "dataflow_g_lib_g_image-0.5.0.1",
+        "ni_lib_junit_results_api-1.0.1.6",
+        "ni_lib_simple_xml-1.0.0.4",
+        "ni_lib_utf_junit_report-1.0.1.43",
+        "oglib_appcontrol-4.1.0.7",
+        "oglib_array-4.1.0.13",
+        "oglib_error-4.2.0.23",
+        "oglib_file-4.0.0.20",
+        "oglib_lvdata-4.2.0.21",
+        "oglib_string-4.1.0.12"
+      ],
+      "error": ""
+    },
+    {
+      "path": "github/labview/vipm/ci-tooling.vipc",
+      "configured": false,
+      "packages": [],
+      "error": "[Errno 2] No such file or directory: 'github/labview/vipm/ci-tooling.vipc'"
+    }
+  ],
+  "columns": [
+    {
+      "key": "snap1w",
+      "label": "1.0 Snap Win",
+      "platform": "windows",
+      "action": "snapshots",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "snap2w",
+      "label": "2.0 Snap Win",
+      "platform": "windows",
+      "action": "snapshots",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "snap2l",
+      "label": "2.0 Snap Linux",
+      "platform": "linux",
+      "action": "snapshots",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "via",
+      "label": "VIA",
+      "platform": "windows",
+      "action": "vi-analyzer",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "diff",
+      "label": "Diff",
+      "platform": "windows",
+      "action": "vidiff",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "mc",
+      "label": "Compile",
+      "platform": "windows",
+      "action": "masscompile",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "utf",
+      "label": "UTF",
+      "platform": "windows",
+      "action": "unit-tests",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    },
+    {
+      "key": "docs",
+      "label": "Antidoc",
+      "platform": "windows",
+      "action": "antidoc",
+      "tag": "base",
+      "ready": true,
+      "packages": [],
+      "version": "base"
+    }
+  ]
+}
