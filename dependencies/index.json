@@ -1,8 +1,22 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "4a6eaa53e8ed855408b3cf46413c0c92ae67006d",
+  "sha": "28b0168340bf9353e98e7efb1d0390057dc36d0d",
   "revisions": [
+    {
+      "sha": "28b0168340bf9353e98e7efb1d0390057dc36d0d",
+      "short": "28b0168",
+      "message": "VI Browser 2.0: stepping through case structures no longer zooms the diagram",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T15:56:29Z"
+    },
+    {
+      "sha": "15aaef57ed140ef41db5168f055d57aead0bcdb1",
+      "short": "15aaef5",
+      "message": "Dependencies: Linux note becomes a column info popover; fix squeezed Win Beta popover (v3.35.4)",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T15:54:44Z"
+    },
     {
       "sha": "4a6eaa53e8ed855408b3cf46413c0c92ae67006d",
       "short": "4a6eaa5",
@@ -688,20 +702,6 @@
       "message": "dashboard: replace emoji status badges with clean status chips (v3.12.4)",
       "author": "Elijah Kerry",
       "date": "2026-06-19T22:27:49Z"
-    },
-    {
-      "sha": "7e1847b721eef7a938391e1b85bc19e042573aa2",
-      "short": "7e1847b",
-      "message": "dashboard: never show a phantom \"updating to the same version\" in the header (v3.12.3)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-19T19:49:31Z"
-    },
-    {
-      "sha": "4a685e91b112bc883f3b328eb07a48d279d13100",
-      "short": "4a685e9",
-      "message": "unit-test runner: dump LVAddons lvaddoninfo.json manifests (v3.12.2)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-19T17:33:10Z"
     },
     {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
