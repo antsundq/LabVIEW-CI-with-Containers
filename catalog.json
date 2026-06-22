@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.37.1",
+  "version": "3.37.2",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.37.2",
+        "date": "2026-06-22",
+        "title": "A job started while the worker image is rebuilding reliably waits, even through a brief Actions-API hiccup",
+        "summary": "When a worker container image is being (re)built and someone pushes a change or enqueues a job in the meantime, that job's container activities (mass compile, VI Analyzer, VIDiff, snapshots, unit tests, Antidoc) already wait for the build to finish before they run, on every Windows and Linux container workflow. This release closes a small gap in that guarantee: the check that decides whether a build is in progress made a single Actions-API call, and if that one call failed transiently (a blip or a momentary rate limit) the job would treat it as 'nothing building' and start early on a stale or half-built image. The check now retries a failed API call a few times before deciding, so a transient hiccup no longer lets a job slip past the wait. A genuine permissions gap still falls through without waiting, so CI is never wedged.",
+        "highlights": [
+          "Jobs enqueued while the worker image is rebuilding wait for the build to finish, then run on the freshly built image -- on all Windows and Linux container workflows",
+          "The in-progress-build check now retries on a failed Actions-API call instead of assuming 'nothing is building' and starting early",
+          "A real actions:read permission gap still never wedges CI (the check falls through after a few quick retries)"
+        ]
+      },
       {
         "version": "3.37.1",
         "date": "2026-06-22",
