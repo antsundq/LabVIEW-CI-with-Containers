@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.35.0",
+  "version": "3.35.1",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.35.1",
+        "date": "2026-06-22",
+        "title": "Dependencies page: Win Beta column with a click-to-explain note",
+        "summary": "The experimental Windows container column on the Dependencies page is now labelled Win Beta, and its column header is clickable: clicking it reveals a short note explaining that Win Beta is a separate, isolated Windows container where new capabilities and new action runners are built and proven -- such as getting VI Browser 2.0 snapshots to render on Windows -- so the in-progress work never disrupts the containers production actions rely on, until it is ready to replace the main Windows container.",
+        "highlights": [
+          "Renames the experimental Windows column to Win Beta across the VIPM/VIPC, NI Packages, and System Components tabs.",
+          "Makes the Win Beta header clickable to reveal an explanatory popover (closes on a second click, an outside click, or Escape), replacing the always-on banner.",
+          "No behaviour change to the existing Windows and Linux columns or to the opt-in EXPERIMENTAL_WINDOWS_IMAGE render lane."
+        ]
+      },
       {
         "version": "3.35.0",
         "date": "2026-06-22",
