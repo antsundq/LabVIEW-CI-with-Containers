@@ -23,12 +23,23 @@ COPY .github/labview/vipm-linux/ /opt/lvci/vipc/
 
 RUN set -eux; \
     chmod +x /opt/lvci/vipm/install-vipc-linux.sh; \
+    NIPKG_BIN="$(command -v nipkg 2>/dev/null || find /usr /opt -type f -name nipkg -perm -111 2>/dev/null | head -n 1 || true)"; \
+    if [ -z "${NIPKG_BIN}" ]; then \
+        echo "nipkg was not found in the LabVIEW Linux base image."; \
+        echo "Available package managers:"; \
+        command -v apt-get || true; \
+        command -v dpkg || true; \
+        command -v rpm || true; \
+        find /usr /opt -maxdepth 4 -type f \( -name 'nipkg*' -o -name '*package*manager*' \) 2>/dev/null | sort | head -n 50 || true; \
+        exit 127; \
+    fi; \
+    echo "Using nipkg: ${NIPKG_BIN}"; \
     echo "Adding nipkg feed: ${NIPM_FEED_URL}"; \
-    nipkg feed-add --name=ni-labview-ci-beta "${NIPM_FEED_URL}" || true; \
-    nipkg update; \
+    "${NIPKG_BIN}" feed-add --name=ni-labview-ci-beta "${NIPM_FEED_URL}" || true; \
+    "${NIPKG_BIN}" update; \
     echo "Installing Linux worker packages: ${VIA_SUPPORT_PACKAGE} ${VIPM_PACKAGE}"; \
-    nipkg install --accept-eulas --no-progress "${VIA_SUPPORT_PACKAGE}"; \
-    nipkg install --accept-eulas --no-progress "${VIPM_PACKAGE}"
+    "${NIPKG_BIN}" install --accept-eulas --no-progress "${VIA_SUPPORT_PACKAGE}"; \
+    "${NIPKG_BIN}" install --accept-eulas --no-progress "${VIPM_PACKAGE}"
 
 RUN --mount=type=secret,id=vipm_serial,required=false \
     --mount=type=secret,id=vipm_full_name,required=false \
