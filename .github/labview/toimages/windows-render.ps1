@@ -124,7 +124,7 @@ $runnerErr = Join-Path $env:TEMP 'lvci-toimages-runner.stderr.log'
 Remove-Item $runnerOut, $runnerErr -Force -ErrorAction SilentlyContinue
 $runnerProcess = Start-Process -FilePath $Runner -NoNewWindow -PassThru -RedirectStandardOutput $runnerOut -RedirectStandardError $runnerErr
 if (-not $runnerProcess.WaitForExit($BatchTimeoutSeconds * 1000)) {
-    Write-Error "Go toimages batch runner timed out after $BatchTimeoutSeconds second(s)"
+    Write-Host "Go toimages batch runner timed out after $BatchTimeoutSeconds second(s)"
     Stop-Process -Id $runnerProcess.Id -Force -ErrorAction SilentlyContinue
     Kill-LabVIEW
     Write-LogFile 'runner stdout' $runnerOut
