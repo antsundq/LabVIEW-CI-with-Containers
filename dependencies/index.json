@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "72164b2a3eb84ba85dde4ebd6ad6b21fcb34c9f3",
+  "sha": "ebd57b4a25dce2e72a161b79923e4322f847eb4f",
   "revisions": [
+    {
+      "sha": "ebd57b4a25dce2e72a161b79923e4322f847eb4f",
+      "short": "ebd57b4",
+      "message": "Container CI works on non-main default branches + ship the missing worker Dockerfiles (v3.37.0)",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T18:18:16Z"
+    },
     {
       "sha": "72164b2a3eb84ba85dde4ebd6ad6b21fcb34c9f3",
       "short": "72164b2",
@@ -695,13 +702,6 @@
       "message": "dashboard: collapse revision table to cards on narrow screens (v3.13.3)",
       "author": "Elijah Kerry",
       "date": "2026-06-20T01:17:47Z"
-    },
-    {
-      "sha": "2a741995e6eb9392d26296d72b9b8cf83c6892fc",
-      "short": "2a74199",
-      "message": "dashboard: re-check queued/running state when the tab is shown again (v3.13.2)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-20T00:43:19Z"
     },
     {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
