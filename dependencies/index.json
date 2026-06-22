@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "2baab78f0fb728def4e72ca6448d22b8c7418d85",
+  "sha": "1dcb2e36dda3000f511eedf7d48805417f6e0441",
   "revisions": [
+    {
+      "sha": "1dcb2e36dda3000f511eedf7d48805417f6e0441",
+      "short": "1dcb2e3",
+      "message": "Dependencies: split dependency source tables",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T12:48:09Z"
+    },
     {
       "sha": "2baab78f0fb728def4e72ca6448d22b8c7418d85",
       "short": "2baab78",
@@ -697,13 +704,6 @@
       "date": "2026-06-19T15:22:12Z"
     },
     {
-      "sha": "017bff5f358fd41f28beef244e536c6169fcbda6",
-      "short": "017bff5",
-      "message": "v3.10.2: use the modern VIPM CLI to apply VIPC and never fail the worker build on it",
-      "author": "Elijah Kerry",
-      "date": "2026-06-19T14:56:36Z"
-    },
-    {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
       "short": "12553d6",
       "message": "added utf files",
@@ -825,6 +825,95 @@
       "error": "[Errno 2] No such file or directory: 'github/labview/vipm/ci-tooling.vipc'"
     }
   ],
+  "nipm": [
+    {
+      "name": "LabVIEW",
+      "source": "NI Package Manager",
+      "labview": true,
+      "platforms": [
+        "windows",
+        "linux"
+      ],
+      "details": "LabVIEW runtime and development packages from the NI feeds."
+    },
+    {
+      "name": "VI Analyzer support",
+      "source": "NI Package Manager",
+      "packages": {
+        "windows": [
+          "ni-viawin-labview-support"
+        ],
+        "linux": [
+          "ni-vialin-labview-support"
+        ]
+      },
+      "platforms": [
+        "windows",
+        "linux"
+      ],
+      "details": "NI VI Analyzer support package used by the analyzer runners."
+    },
+    {
+      "name": "NI Unit Test Framework",
+      "source": "NI Package Manager",
+      "packages": {
+        "windows": [
+          "ni-utf-labview-support"
+        ]
+      },
+      "platforms": [
+        "windows"
+      ],
+      "details": "NI UTF support package used by the Windows unit-test runner."
+    },
+    {
+      "name": "VI Package Manager",
+      "source": "NI Package Manager",
+      "packages": {
+        "windows": [
+          "ni-vipm"
+        ]
+      },
+      "platforms": [
+        "windows"
+      ],
+      "details": "NI-published VIPM package that enables VIPC application during Windows worker builds."
+    }
+  ],
+  "system": [
+    {
+      "name": "VI Browser 2.0 toimages runner",
+      "source": "Repository Go code",
+      "path": ".github/labview/toimages/main.go",
+      "details": "Batch runner compiled from repo Go source; Linux uses the toimages GHCR image and Windows builds runner.exe in the workflow.",
+      "platforms": {
+        "windows": {
+          "present": true,
+          "label": "workflow-built"
+        },
+        "linux": {
+          "present": true,
+          "label": "toimages image"
+        }
+      }
+    },
+    {
+      "name": "lvctl render engine",
+      "source": "Repository Go code + embedded VIs",
+      "path": ".github/labview/toimages/_ni/labview/lvctl",
+      "details": "Renderer used by VI Browser 2.0 to drive LabVIEW and emit position-aware frame JSON.",
+      "platforms": {
+        "windows": {
+          "present": true,
+          "label": "workflow-built"
+        },
+        "linux": {
+          "present": true,
+          "label": "toimages image"
+        }
+      }
+    }
+  ],
   "columns": [
     {
       "key": "windows",
@@ -848,6 +937,122 @@
         "oglib_string-4.1.0.12",
         "wovalab_lib_antidoc_cli-3.3.0.117"
       ],
+      "nipkg_ready": true,
+      "nipkg_packages": [
+        {
+          "name": "ni-expat1-libs",
+          "version": "2.7.3."
+        },
+        {
+          "name": "ni-expat1-libs",
+          "version": "2.6.3."
+        },
+        {
+          "name": "ni-labview-2026-help-en",
+          "version": "(64-bit)."
+        },
+        {
+          "name": "ni-labview-2026-manuals",
+          "version": "(64-bit)."
+        },
+        {
+          "name": "ni-labview-dett-labview-2022-support",
+          "version": "(64-bit)."
+        },
+        {
+          "name": "ni-labview-dett-labview-2022-support-x86",
+          "version": "2022."
+        },
+        {
+          "name": "ni-labview-dett-labview-2023-support",
+          "version": "(64-bit)."
+        },
+        {
+          "name": "ni-labview-dett-labview-2023-support-x86",
+          "version": "2023."
+        },
+        {
+          "name": "ni-lv-web-server-labview-2026-runtime-engine-support",
+          "version": "64-Bit."
+        },
+        {
+          "name": "ni-lv-web-server-labview-2026-support",
+          "version": "64-Bit."
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msdotnet4x",
+          "version": "4.8.0"
+        },
+        {
+          "name": "ni-msvcrt-2015",
+          "version": "14.44.35112"
+        },
+        {
+          "name": "ni-msvcrt-2015",
+          "version": "14.42.34433"
+        },
+        {
+          "name": "ni-mswebview2",
+          "version": "143.0.3650"
+        },
+        {
+          "name": "ni-mswebview2",
+          "version": "131.0.2903"
+        },
+        {
+          "name": "ni-openssl3-libs",
+          "version": "3.5.4."
+        },
+        {
+          "name": "ni-openssl3-libs",
+          "version": "3.0.15."
+        },
+        {
+          "name": "ni-openssl3-libs-x86",
+          "version": "3.5.4."
+        },
+        {
+          "name": "ni-openssl3-libs-x86",
+          "version": "3.0.15."
+        },
+        {
+          "name": "ni-search-labview-2026-support",
+          "version": "(64-bit)."
+        },
+        {
+          "name": "ni-web-services-labview-2026-support",
+          "version": "64-Bit."
+        }
+      ],
+      "labview_version": "2026",
       "version": "win-8913c01f4cc4"
     },
     {
@@ -858,7 +1063,11 @@
       "ready": true,
       "packages": [],
       "version": "pending",
-      "unsupported": true
+      "unsupported": true,
+      "nipkg_ready": true,
+      "nipkg_packages": [],
+      "nipkg_version": "linux-c6484cf4d66a",
+      "labview_version": "2026"
     }
   ]
 }
