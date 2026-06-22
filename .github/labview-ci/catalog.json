@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.38.5",
+  "version": "3.38.6",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.38.6",
+        "date": "2026-06-22",
+        "title": "VI Browser snapshots render on the Windows worker using the cross-platform Go VI Server engine",
+        "summary": "The Windows VI snapshot render now drives LabVIEW through the same TCP VI Server Go engine used on Linux instead of the removed COM/ActiveX path, and three Windows-only failures are fixed: a bare-integer render timeout (for example '180') was parsed as days and overflowed the millisecond WaitForExit before the render could start, the Windows container frame copy used an unreliable contents-form docker cp, and the GitHub Pages publish could lose a race against other gh-pages writers.",
+        "highlights": [
+          "Windows snapshots render through the shared cross-platform VI Server Go engine, so the COM/ActiveX-only render files are removed",
+          "A bare-integer render_timeout is now read as seconds and the WaitForExit wait is clamped to Int32 milliseconds, so the render no longer fails before it begins",
+          "Frames are copied out of the Windows container through a fresh staging directory, and the JSON is published to GitHub Pages with a re-clone and retry loop that survives concurrent gh-pages pushes"
+        ]
+      },
       {
         "version": "3.38.5",
         "date": "2026-06-22",

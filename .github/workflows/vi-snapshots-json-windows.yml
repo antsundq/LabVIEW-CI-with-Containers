@@ -236,9 +236,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Error 'container start failed'; exit 1 }
 
           try {
-            # The in-container entrypoint enables LabVIEW scripting, brings up a
-            # COM-ready headless LabVIEW, then runs the batch runner. Output is
-            # written container-local to C:\out\by-blob and copied back below.
+            # The in-container entrypoint enables LabVIEW VI Server (TCP), brings
+            # up a headless LabVIEW, then runs the Go batch runner -- the same
+            # toolchain the Linux path uses. Output is written container-local to
+            # C:\out\by-blob and copied back to the host below.
             docker exec $name powershell -NoProfile -ExecutionPolicy Bypass `
               -File 'C:\repo\.github\labview\toimages\windows-render.ps1' `
               -Workspace 'C:\repo\_target' `
@@ -250,10 +251,26 @@ jobs:
                 -ComReadySeconds 600
               $renderExit = $LASTEXITCODE
               Write-Host "render exit code: $renderExit"
-              if ($renderExit -ne 0) { throw "Windows VI Browser 2.0 render failed with exit code $renderExit" }
 
+            # Copy frames out of the container BEFORE deciding success/failure so a
+            # partial render is never lost with the container. docker cp to a FRESH
+            # (non-existent) staging path uses unambiguous "copy directory contents"
+            # semantics, then merge into the seeded host _winout\by-blob. (The old
+            # "C:\out\by-blob\." contents-copy form silently produced nothing on
+            # Windows containers.)
+            $stage = "$repo\_wincp"
+            Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+            docker cp "${name}:C:\out\by-blob" $stage
+            if ($LASTEXITCODE -ne 0) { Write-Host "WARNING: docker cp of C:\out\by-blob failed (exit $LASTEXITCODE)" }
             New-Item -ItemType Directory -Force -Path "$repo\_winout\by-blob" | Out-Null
-            docker cp "${name}:C:\out\by-blob\." "$repo\_winout\by-blob" 2>$null
+            if (Test-Path $stage) {
+              Copy-Item -Path "$stage\*" -Destination "$repo\_winout\by-blob" -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+            $hostCount = @(Get-ChildItem -Path "$repo\_winout\by-blob" -Recurse -Filter '*.json' -ErrorAction SilentlyContinue).Count
+            Write-Host "Host _winout\by-blob now holds $hostCount frame JSON file(s)"
+
+            if ($renderExit -ne 0) { throw "Windows VI Browser 2.0 render failed with exit code $renderExit" }
           }
           finally {
             docker rm -f $name | Out-Null
@@ -302,14 +319,43 @@ jobs:
           cp _winout/json-blobs.windows.json _winpublish/json-blobs.windows.json
           if [ -d _winout/by-blob ]; then cp -R _winout/by-blob _winpublish/by-blob; fi
 
-      - name: Deploy Windows JSON to GitHub Pages
+      - name: Deploy Windows JSON to GitHub Pages (race-safe)
         if: steps.index.outputs.count != '0'
-        uses: peaceiris/actions-gh-pages@v4.1.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: _winpublish
-          destination_dir: vi-snapshots
-          keep_files: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          src="$PWD/_winpublish"
+          if [ ! -d "$src" ]; then echo "nothing to deploy"; exit 0; fi
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # gh-pages is a hot branch (many workflows deploy to it concurrently), so a
+          # single clone->commit->push loses the push race intermittently. Re-clone the
+          # latest gh-pages and retry on rejection. Mirrors peaceiris destination_dir=
+          # vi-snapshots + keep_files: overlay our files without deleting anything else.
+          ok=0
+          for attempt in 1 2 3 4 5; do
+            work="$(mktemp -d)"
+            if ! git clone --depth=1 --single-branch --branch gh-pages "$remote" "$work"; then
+              echo "clone failed (attempt $attempt); retrying..."; rm -rf "$work"; sleep $((attempt * 5)); continue
+            fi
+            mkdir -p "$work/vi-snapshots"
+            cp -R "$src/." "$work/vi-snapshots/"
+            git -C "$work" add -A
+            if git -C "$work" diff --cached --quiet; then
+              echo "no changes to publish"; ok=1; rm -rf "$work"; break
+            fi
+            git -C "$work" commit -q -m "deploy windows snapshots: ${GITHUB_SHA}"
+            if git -C "$work" push origin gh-pages; then
+              echo "pushed on attempt $attempt"; ok=1; rm -rf "$work"; break
+            fi
+            echo "gh-pages push race on attempt $attempt; re-cloning and retrying..."
+            rm -rf "$work"
+            sleep $((attempt * 5))
+          done
+          if [ "$ok" -ne 1 ]; then echo "failed to deploy to gh-pages after retries" >&2; exit 1; fi
 
       - name: Upload rendered frames JSON
         if: always()
