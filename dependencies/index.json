@@ -1,8 +1,22 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "1dcb2e36dda3000f511eedf7d48805417f6e0441",
+  "sha": "83be87b0ab8d8bb167076b77a251cd73c1ff9964",
   "revisions": [
+    {
+      "sha": "83be87b0ab8d8bb167076b77a251cd73c1ff9964",
+      "short": "83be87b",
+      "message": "Release v3.34.22 dependency source tables",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T12:52:39Z"
+    },
+    {
+      "sha": "cb025d118bad6e5e8378879f989beacb2bce3ab9",
+      "short": "cb025d1",
+      "message": "Release v3.34.21 dependency source tables",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T12:49:13Z"
+    },
     {
       "sha": "1dcb2e36dda3000f511eedf7d48805417f6e0441",
       "short": "1dcb2e3",
@@ -688,20 +702,6 @@
       "message": "unit-test report: banner when the container is missing required tooling (v3.11.1)",
       "author": "Elijah Kerry",
       "date": "2026-06-19T16:16:09Z"
-    },
-    {
-      "sha": "330375d4c50323b76762e2a9bdbd6bf7f660dd18",
-      "short": "330375d",
-      "message": "VI Analyzer: configure which test settings run on which code + re-run a single VI with a chosen configuration (v3.11.0)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-19T16:10:07Z"
-    },
-    {
-      "sha": "7157534898b22d0df4b7e068129c32b5bb361b0a",
-      "short": "7157534",
-      "message": "v3.10.3: print LabVIEW CLI session log when a UTF run produces no report",
-      "author": "Elijah Kerry",
-      "date": "2026-06-19T15:22:12Z"
     },
     {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
