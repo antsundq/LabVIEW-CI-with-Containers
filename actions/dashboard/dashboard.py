@@ -2810,7 +2810,10 @@ def _repo_vipcs():
     dirs[:] = [d for d in dirs if d not in skip]
     for name in files:
       if name.lower().endswith('.vipc'):
-        out.append(os.path.join(root, name).replace('\\', '/').lstrip('./'))
+        path = os.path.join(root, name).replace('\\', '/')
+        if path.startswith('./'):
+          path = path[2:]
+        out.append(path)
   return sorted(out, key=str.lower)
 
 def _worker_manifest(platform, tag):
@@ -2831,6 +2834,57 @@ def _manifest_packages(man):
       for pkg in vipc.get('packages') or []:
         packages.add(pkg)
   return sorted(packages, key=str.lower)
+
+# The core tooling VIPC is always baked into every worker; capability VIPCs live
+# under .github/labview/<cap>/<cap>.vipc and are baked only when that capability's
+# action workflow is installed (see build-labview-image.yml "Stage repo VIPC files").
+TOOLING_CORE_VIPC = '.github/labview/vipm/ci-tooling.vipc'
+_CAPABILITY_WORKFLOW = {
+  'antidoc': '.github/workflows/run-antidoc-windows-container.yml',
+}
+
+def _capability_for_vipc(path):
+  m = re.match(r'^\.github/labview/([^/]+)/(?:[^/]+)\.vipc$', path or '')
+  if not m:
+    return ''
+  cap = m.group(1)
+  return cap if cap in _CAPABILITY_WORKFLOW else ''
+
+def _capability_enabled(cap):
+  wf = _CAPABILITY_WORKFLOW.get(cap)
+  return bool(wf and os.path.isfile(wf))
+
+def _vipc_role(path, config_vipc_paths, has_config_list):
+  """Classify a discovered VIPC and whether it is applied to the worker image.
+
+  - core:       ci-tooling.vipc, always baked.
+  - capability: .github/labview/<cap>/<cap>.vipc, baked only when <cap> is installed.
+  - project:    anything else; baked when listed in config.container.vipc (or, when
+                no list is configured, every project VIPC is baked by default).
+  """
+  if path == TOOLING_CORE_VIPC:
+    return 'core', '', True
+  cap = _capability_for_vipc(path)
+  if cap:
+    return 'capability', cap, _capability_enabled(cap)
+  configured = (path in config_vipc_paths) if has_config_list else True
+  return 'project', '', configured
+
+def _manifest_failed_packages(man):
+  """Package names a worker manifest reports as failing to install (optional).
+
+  Surfaced as a red error marker on the Dependencies page. Manifests that only
+  list successfully-applied packages yield an empty set (no false errors)."""
+  out = set()
+  if isinstance(man, dict):
+    for name in man.get('failed_packages') or []:
+      if isinstance(name, str) and name.strip():
+        out.add(name.strip())
+    for vipc in man.get('vipc') or []:
+      for name in vipc.get('failed') or []:
+        if isinstance(name, str) and name.strip():
+          out.add(name.strip())
+  return sorted(out, key=str.lower)
 
 def _manifest_nipkg_packages(man):
   packages = []
@@ -2903,11 +2957,14 @@ def _system_dependencies():
 
 def _build_dependencies_index():
   config = _parse_container_config()
-  configured = {v.get('path', '') for v in config.get('vipc') or []}
+  config_vipc_paths = {v.get('path', '') for v in config.get('vipc') or []}
+  has_config_list = bool(config_vipc_paths)
   vipcs = []
   for path in _repo_vipcs():
     packages, error = _parse_vipc_packages(path)
-    vipcs.append({'path': path, 'configured': path in configured, 'packages': packages, 'error': error})
+    role, capability, configured = _vipc_role(path, config_vipc_paths, has_config_list)
+    vipcs.append({'path': path, 'role': role, 'capability': capability,
+                  'configured': configured, 'packages': packages, 'error': error})
   columns = [
     {'key': 'windows', 'label': 'Windows', 'platform': 'windows', 'defaultTag': 'latest'},
     {'key': 'linux', 'label': 'Linux', 'platform': 'linux', 'defaultTag': 'latest'},
@@ -2924,6 +2981,7 @@ def _build_dependencies_index():
       man = manifest_cache[cache_key]
       col['ready'] = isinstance(man, dict)
       col['packages'] = _manifest_packages(man)
+      col['failed_packages'] = _manifest_failed_packages(man)
       col['nipkg_ready'] = isinstance(man, dict)
       col['nipkg_packages'] = _manifest_nipkg_packages(man)
       col['labview_version'] = man.get('labview_version', '') if isinstance(man, dict) else ''
@@ -2931,6 +2989,7 @@ def _build_dependencies_index():
     else:
       col['ready'] = True
       col['packages'] = []
+      col['failed_packages'] = []
       col['nipkg_ready'] = True
       col['nipkg_packages'] = []
       col['labview_version'] = ''
