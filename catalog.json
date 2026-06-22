@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.38.2",
+  "version": "3.38.3",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.38.3",
+        "date": "2026-06-22",
+        "title": "Linux Beta image build finds NI Package Manager outside PATH",
+        "summary": "Makes the experimental Linux Beta Dockerfile locate the NI Package Manager executable before installing VI Analyzer support and VIPM, and prints a package-manager inventory if the current NI base image does not include nipkg.",
+        "highlights": [
+          "The Linux Beta image no longer assumes nipkg is on PATH before installing ni-vialin-labview-support and ni-vipm",
+          "If the NI Linux base image omits nipkg entirely, the build now reports the available package manager commands and likely package-manager files",
+          "Repository VIPC staging remains isolated to the Linux Beta VIPC input directory before the VIPM apply step"
+        ]
+      },
       {
         "version": "3.38.2",
         "date": "2026-06-22",
