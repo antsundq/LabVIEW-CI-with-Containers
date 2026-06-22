@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "be23282470cef49ec12b21cf75cb4ec5784b875b",
+  "sha": "3ef0604b88bac66dc18708dab41fce993fb612a6",
   "revisions": [
+    {
+      "sha": "3ef0604b88bac66dc18708dab41fce993fb612a6",
+      "short": "3ef0604",
+      "message": "Fix dashboard mobile card layout",
+      "author": "Elijah Kerry",
+      "date": "2026-06-22T14:01:17Z"
+    },
     {
       "sha": "be23282470cef49ec12b21cf75cb4ec5784b875b",
       "short": "be23282",
@@ -695,13 +702,6 @@
       "message": "dashboard menu: show target version while Pages rebuilds (v3.12.1)",
       "author": "Elijah Kerry",
       "date": "2026-06-19T17:16:20Z"
-    },
-    {
-      "sha": "6707aae888ce898c493e4d1588802c6591ddbda0",
-      "short": "6707aae",
-      "message": "Merge branch 'main' of https://github.com/elijah286/LabVIEW-CI-with-Containers",
-      "author": "Elijah Kerry",
-      "date": "2026-06-19T16:53:28Z"
     },
     {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
