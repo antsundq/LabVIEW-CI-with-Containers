@@ -2017,7 +2017,7 @@ run_dialog = (r"""
       // The exact cells to dispatch, from each activity's mode + the revision scope:
       //   off    -> nothing
       //   fill   -> only the empty (never-run) cells          (the old default)
-      //   rerun  -> empty AND already-done cells, re-dispatched (replaces the result)
+      //   rerun  -> empty AND already-done cells: fill gaps and replace existing results
       // Snapshots is content-addressed: its one backfill run only ever renders the
       // MISSING blobs, so it has no meaningful "re-run" \u2014 it always behaves as fill.
       var inc=histIncludedShas(); var out=[];
@@ -2058,11 +2058,11 @@ run_dialog = (r"""
       // re-enable the original intent because actMode itself is left untouched.
       //   snapshots -> only ever fills the missing renders (content-addressed)
       //   fill      -> needs a missing cell, else there is nothing to fill (Skip)
-      //   rerun     -> needs an existing result to replace; with none it falls back
-      //                to filling the gaps, or Skip when there are none either
+      //   rerun     -> every selected revision with this activity; existing results
+      //                are replaced and missing cells are filled
       if(mode==='off') return 'off';
       if(cap==='snapshots') return c.fill>0 ? 'fill' : 'off';
-      if(mode==='rerun')    return c.done>0 ? 'rerun' : (c.fill>0 ? 'fill' : 'off');
+      if(mode==='rerun')    return (c.done>0 || c.fill>0) ? 'rerun' : 'off';
       return c.fill>0 ? 'fill' : 'off';
     }
     function histRefresh(){
@@ -2084,9 +2084,9 @@ run_dialog = (r"""
             bFill.title=(c.fill>0 ? (cap==='snapshots'?'Render the snapshots still missing in the selected revisions':'Queue only the selected revisions missing this result')
                                   : (cap==='snapshots'?'Nothing to render \u2014 every selected revision already has its snapshots':'Nothing to fill \u2014 every selected revision already has this result')); }
           var bRe=seg.querySelector('button[data-mode="rerun"]');
-          if(bRe){ bRe.disabled=(c.done===0);
-            bRe.title=(c.done>0 ? 'Re-run every selected revision, replacing the existing result'
-                                : 'Nothing to re-run \u2014 no existing results in the selected revisions yet'); }
+          if(bRe){ bRe.disabled=((c.done||0)+(c.fill||0)===0);
+            bRe.title=((c.done||0)+(c.fill||0)>0 ? 'Run every selected revision for this activity; existing results are replaced and missing ones are filled'
+                                               : 'Nothing to re-run \u2014 no selected revisions have this activity'); }
           Array.prototype.forEach.call(seg.querySelectorAll('button'), function(b){ b.classList.toggle('on', b.getAttribute('data-mode')===mode); });
         }
         var row=document.getElementById('cidash-hist-actrow-'+cap); if(row) row.classList.toggle('skip', mode==='off');
