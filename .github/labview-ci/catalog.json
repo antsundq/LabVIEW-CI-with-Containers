@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.39.2",
+  "version": "3.39.3",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.39.3",
+        "date": "2026-06-22",
+        "title": "Keep example VIPC in the Linux-proven artifact shape",
+        "summary": "The Linux and Linux Beta image builds now keep example/Dependencies.vipc in the exact 10-package artifact shape that native Linux VIPM has already applied successfully. Version 3.39.2 moved G Image into the core tooling VIPC, but removing it from the example VIPC made Linux VIPM reject that project VIPC as invalid during image build. This patch keeps the core-tooling ownership change while restoring the example VIPC artifact shape needed by the Linux VIPM installer.",
+        "highlights": [
+          "Restores example/Dependencies.vipc to the Linux-proven 10-package VIPC artifact after the 3.39.2 reduction failed in Linux Beta",
+          "Leaves G Image in ci-tooling.vipc for tooling ownership, while also preserving the project VIPC shape Linux VIPM accepts",
+          "Unblocks the stable Linux and Linux Beta worker image builds triggered by VIPC changes"
+        ]
+      },
       {
         "version": "3.39.2",
         "date": "2026-06-22",
