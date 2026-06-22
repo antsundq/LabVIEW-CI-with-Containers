@@ -2866,9 +2866,9 @@ def _known_nipm_dependencies():
     {
       'name': 'VI Package Manager',
       'source': 'NI Package Manager',
-      'packages': {'windows': ['ni-vipm']},
-      'platforms': ['windows'],
-      'details': 'NI-published VIPM package that enables VIPC application during Windows worker builds.',
+      'packages': {'windows': ['ni-vipm'], 'linux': ['ni-vipm']},
+      'platforms': ['windows', 'linux'],
+      'details': 'NI-published VIPM package that enables VIPC application during worker builds.',
     },
   ]
 
@@ -2911,6 +2911,7 @@ def _build_dependencies_index():
   columns = [
     {'key': 'windows', 'label': 'Windows', 'platform': 'windows', 'defaultTag': 'latest'},
     {'key': 'linux', 'label': 'Linux', 'platform': 'linux', 'tag': 'base'},
+    {'key': 'linuxBeta', 'label': 'Linux Beta', 'platform': 'linux-beta', 'tag': 'latest', 'defaultTag': 'latest'},
   ]
   manifest_cache = {}
   for col in columns:

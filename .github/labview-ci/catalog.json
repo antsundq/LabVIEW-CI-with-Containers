@@ -1,11 +1,22 @@
 {
   "schemaVersion": 1,
-  "version": "3.37.2",
+  "version": "3.38.0",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.38.0",
+        "date": "2026-06-22",
+        "title": "Experimental Linux Beta worker applies VIPM/VIPC dependencies",
+        "summary": "Adds an opt-in Linux Beta worker image that installs VIPM, applies repository VIPC files during the image build, publishes a workers/linux-beta manifest, and can be selected by Linux container activities without changing the stable Linux base-image path. Experimental capabilities are now first-class catalog entries and stay out of Apply to New Repo defaults unless the Experimental features card is selected.",
+        "highlights": [
+          "Adds Build LabVIEW CI Image - Linux Beta, a separate GHCR image lane that installs ni-vialin-labview-support and ni-vipm, applies configured VIPC files, and publishes linux-beta worker manifests",
+          "Lets Linux Mass Compile, VI Analyzer, and VIDiff keep using the NI base image for empty/base/none while routing latest or Linux Beta tags to the linux-beta worker image",
+          "Keeps Antidoc, Linux Beta, Linux VIPM/VIPC support, and Windows VI Browser 2.0 snapshots behind a deselected Experimental features card in Apply to New Repo"
+        ]
+      },
       {
         "version": "3.37.2",
         "date": "2026-06-22",
@@ -2523,7 +2534,8 @@
   "defaults": {
     "labviewVersion": "2026",
     "os": [
-      "windows"
+      "windows",
+      "linux"
     ],
     "branch": "main"
   },
@@ -2737,7 +2749,6 @@
         ],
         "windows": [
           ".github/workflows/vi-snapshots.yml",
-          ".github/workflows/vi-snapshots-json-windows.yml",
           ".github/labview/build-snapshots.ps1",
           ".github/labview/render-snapshots.ps1",
           ".github/labview/build-json-worklist.sh",
@@ -2746,7 +2757,7 @@
         ],
         "linux": []
       },
-      "notes": "Snapshot rendering runs on the Windows container. VI Browser 2.0 can also publish Windows frames JSON beside the Linux 2.0 frames."
+      "notes": "Snapshot rendering runs on the Windows container. The experimental Windows VI Browser 2.0 frames workflow can publish Windows frames JSON beside the Linux 2.0 frames."
     },
     {
       "id": "custom-image",
@@ -2763,7 +2774,8 @@
       "statusContext": null,
       "files": {
         "any": [
-          ".github/labview/build-worker-manifest.py"
+          ".github/labview/build-worker-manifest.py",
+          ".github/labview/wait-for-worker-image.sh"
         ],
         "windows": [
           ".github/workflows/build-labview-image.yml",
@@ -2778,6 +2790,80 @@
         ]
       },
       "notes": "Only required if you want the full VI Analyzer test set or to bake .vipc dependencies into the worker. Any repo-root *.vipc is detected and baked automatically. Non-2026 LabVIEW versions need a matching nipkg feed URL (build-arg)."
+    },
+    {
+      "id": "linux-vipm",
+      "name": "Linux VIPM/VIPC support",
+      "summary": "Installs the Linux-side VIPM/VIPC helper used by the Linux Beta worker image to apply repository VIPC dependency files during the image build.",
+      "status": "experimental",
+      "recommended": false,
+      "supportsOs": [
+        "linux"
+      ],
+      "requires": [],
+      "recommends": [
+        "linux-beta-container"
+      ],
+      "statusContext": null,
+      "files": {
+        "any": [],
+        "windows": [],
+        "linux": [
+          ".github/labview/vipm/install-vipc-linux.sh"
+        ]
+      },
+      "notes": "Experimental Linux VIPM execution is only used by the Linux Beta container lane. Stable Linux actions continue to run on the NI base image unless that Beta image is selected in Configure Workers."
+    },
+    {
+      "id": "linux-beta-container",
+      "name": "Linux Beta container image",
+      "summary": "Builds an isolated Linux Beta worker image that includes VI Analyzer support, VIPM, repository VIPC dependencies, and a workers/linux-beta manifest without changing the stable Linux base-image path.",
+      "status": "experimental",
+      "recommended": false,
+      "supportsOs": [
+        "linux"
+      ],
+      "requires": [
+        "linux-vipm"
+      ],
+      "recommends": [],
+      "statusContext": null,
+      "files": {
+        "any": [
+          ".github/labview/build-worker-manifest.py"
+        ],
+        "windows": [],
+        "linux": [
+          ".github/workflows/build-labview-linux-beta-image.yml",
+          ".github/docker/labview-ci-linux-beta.Dockerfile"
+        ]
+      },
+      "notes": "This publishes linux-beta-* and linux-beta-latest tags. Linux Mass Compile, VI Analyzer, and VIDiff use the stable NI base image until a Linux Beta tag is selected in Configure Workers."
+    },
+    {
+      "id": "snapshots-windows-2",
+      "name": "Windows VI Browser 2.0 snapshots",
+      "summary": "Adds the experimental Windows container VI Browser 2.0 render workflow, publishing Windows frames JSON beside the existing snapshot gallery data.",
+      "status": "experimental",
+      "recommended": false,
+      "supportsOs": [
+        "windows"
+      ],
+      "requires": [
+        "snapshots"
+      ],
+      "recommends": [
+        "dashboard"
+      ],
+      "statusContext": null,
+      "files": {
+        "any": [],
+        "windows": [
+          ".github/workflows/vi-snapshots-json-windows.yml"
+        ],
+        "linux": []
+      },
+      "notes": "This is additive to the stable snapshot workflows and uses the stock NI Windows container unless EXPERIMENTAL_WINDOWS_IMAGE is set."
     },
     {
       "id": "unit-tests",
@@ -2810,12 +2896,14 @@
       "id": "antidoc",
       "name": "Antidoc",
       "summary": "Generates browsable project documentation with Antidoc (Wovalab) inside the Windows worker and publishes it to Pages, framed in the dashboard. Antidoc renders the project structure, VI descriptions and block-diagram images headlessly through the Antidoc CLI.",
-      "status": "stable",
+      "status": "experimental",
       "recommended": false,
       "supportsOs": [
         "windows"
       ],
-      "requires": [],
+      "requires": [
+        "custom-image"
+      ],
       "recommends": [
         "dashboard",
         "custom-image"

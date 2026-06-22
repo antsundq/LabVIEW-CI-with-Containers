@@ -57,7 +57,7 @@ api_repo="repos/${repo}/actions/runs?per_page=50"
 changed=false
 if [ -n "${before:-}" ] && git cat-file -e "${before}^{commit}" 2>/dev/null; then
   if git diff --name-only "$before" "$sha" \
-      | grep -Eq '(\.vipc$|^\.github/docker/labview-ci\.Dockerfile$|^\.github/labview/vipm/)'; then
+      | grep -Eq '(\.vipc$|^\.github/docker/labview-ci\.Dockerfile$|^\.github/docker/labview-vipm-base\.Dockerfile$|^\.github/docker/labview-vipc-layer\.Dockerfile$|^\.github/docker/labview-ci-linux\.Dockerfile$|^\.github/docker/labview-ci-linux-beta\.Dockerfile$|^\.github/labview/build-worker-manifest\.py$|^\.github/labview/wait-for-worker-image\.sh$|^\.github/labview/vipm/|^\.github/workflows/build-labview-image\.yml$|^\.github/workflows/build-labview-linux-image\.yml$|^\.github/workflows/build-labview-linux-beta-image\.yml$)'; then
     changed=true
   fi
 fi
