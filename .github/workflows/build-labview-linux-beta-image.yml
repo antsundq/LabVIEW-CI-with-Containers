@@ -111,7 +111,7 @@ jobs:
               pathlib.Path('.github/docker/labview-ci-linux-beta.Dockerfile'),
               pathlib.Path('.github/labview/vipm/install-vipc-linux.sh'),
           ]
-            files += sorted(pathlib.Path('.github/labview/vipm-linux').glob('*.vipc'), key=lambda p: p.name.lower())
+          files += sorted(pathlib.Path('.github/labview/vipm-linux').glob('*.vipc'), key=lambda p: p.name.lower())
           parts = []
           for path in files:
               if path.exists():
