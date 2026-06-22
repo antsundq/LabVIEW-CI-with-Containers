@@ -44,7 +44,7 @@ env:
 
 concurrency:
   group: vi-snapshots-json-windows
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   render:
