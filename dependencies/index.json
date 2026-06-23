@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "c067715b82d9cb202ae19b48abd30809fa210a6f",
+  "sha": "6ec5d4fec2a0a9cb0a6b65d2e449a900ac4f80ac",
   "revisions": [
+    {
+      "sha": "6ec5d4fec2a0a9cb0a6b65d2e449a900ac4f80ac",
+      "short": "6ec5d4f",
+      "message": "Install JKI Dragon in the Windows worker (v3.40.0)",
+      "author": "Elijah Kerry",
+      "date": "2026-06-23T00:28:47Z"
+    },
     {
       "sha": "c067715b82d9cb202ae19b48abd30809fa210a6f",
       "short": "c067715",
@@ -697,13 +704,6 @@
       "date": "2026-06-20T13:37:43Z"
     },
     {
-      "sha": "23bc50bbd55065963da39576d62baaa2554b8023",
-      "short": "23bc50b",
-      "message": "header: Activity picker to switch a revision's reports in place (v3.24.0)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-20T12:58:37Z"
-    },
-    {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
       "short": "12553d6",
       "message": "added utf files",
@@ -884,6 +884,19 @@
         "windows"
       ],
       "details": "NI UTF support package used by the Windows unit-test runner."
+    },
+    {
+      "name": "JKI Dragon",
+      "source": "NI Package Manager",
+      "packages": {
+        "windows": [
+          "jki-dragon"
+        ]
+      },
+      "platforms": [
+        "windows"
+      ],
+      "details": "JKI Dragon dependency-management tooling installed from the LabVIEW 2026 NI Package Manager feed."
     },
     {
       "name": "VI Package Manager",
