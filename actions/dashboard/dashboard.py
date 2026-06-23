@@ -1148,8 +1148,8 @@ run_dialog_css = (
     # platform selectors, then a Skip / Fill / Re-run segmented control.
     '.cidash-hist-acts{display:flex;flex-direction:column;gap:7px}'
     '.cidash-hist-actsempty{color:var(--fg-muted);font-size:.85em;padding:4px 2px}'
-    '.cidash-hist-act{display:grid;grid-template-columns:minmax(170px,1fr) auto;grid-template-areas:"info count" "info controls";gap:6px 14px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}'
-    '.cidash-hist-act.has-plats{grid-template-areas:"info count" "info plats" "info controls"}'
+    '.cidash-hist-act{display:grid;grid-template-columns:minmax(170px,1fr) max-content max-content;grid-template-areas:"info count controls";gap:8px 10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}'
+    '.cidash-hist-act.has-plats{grid-template-columns:minmax(160px,1fr) max-content max-content max-content;grid-template-areas:"info count plats controls"}'
     # A skipped activity dims only its name + count (so it reads as "off") while its
     # Skip / Fill / Re-run control stays full-strength and clearly clickable -
     # dimming the whole row made "Clear" look like nothing could be selected.
@@ -1158,7 +1158,7 @@ run_dialog_css = (
     '.cidash-hist-actname{font-size:.9em;font-weight:600}'
     '.cidash-hist-actsub{color:var(--fg-muted);font-size:.82em;margin-top:1px;line-height:1.4}'
     '.cidash-hist-actcount{grid-area:count;justify-self:end;font-size:.74em;color:var(--fg-muted);white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}'
-    '.cidash-hist-plats{grid-area:plats;justify-self:end;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.74em;color:var(--fg-muted)}'
+    '.cidash-hist-plats{grid-area:plats;justify-self:end;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;font-size:.74em;color:var(--fg-muted)}'
     '.cidash-hist-plats label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}'
     '.cidash-hist-plats input{accent-color:var(--link);width:13px;height:13px;margin:0}'
     '.cidash-seg{grid-area:controls;justify-self:end;display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}'
@@ -1167,7 +1167,7 @@ run_dialog_css = (
     '.cidash-seg button.on{background:var(--link);color:#fff}'
     '.cidash-seg button:disabled{opacity:.34;cursor:default}'
     '.cidash-seg button:not(.on):not(:disabled):hover{background:var(--surface);color:var(--fg)}'
-    '@media(max-width:560px){.cidash-hist-act{grid-template-columns:1fr;grid-template-areas:"info" "count" "controls"}.cidash-hist-act.has-plats{grid-template-areas:"info" "count" "plats" "controls"}.cidash-hist-actcount,.cidash-hist-plats,.cidash-seg{justify-self:start}}'
+    '@media(max-width:640px){.cidash-hist-act,.cidash-hist-act.has-plats{grid-template-columns:1fr;grid-template-areas:"info" "count" "plats" "controls"}.cidash-hist-act:not(.has-plats){grid-template-areas:"info" "count" "controls"}.cidash-hist-actcount,.cidash-hist-plats,.cidash-seg{justify-self:start}.cidash-hist-plats{flex-wrap:wrap}}'
     '.cidash-hist-summary{font-size:.84em;color:var(--fg-muted);margin:0 0 12px}'
     '.cidash-hist-summary b{color:var(--fg)}'
 )
