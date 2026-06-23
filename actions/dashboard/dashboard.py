@@ -1144,30 +1144,39 @@ run_dialog_css = (
     '.cidash-hist-quick{display:flex;flex-wrap:wrap;gap:6px}'
     '.cidash-hist-chip{border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:999px;padding:4px 11px;font-size:.76em;font-weight:600;cursor:pointer;font-family:inherit}'
     '.cidash-hist-chip:hover{border-color:var(--link);color:var(--link)}'
-    # One row per activity: name + sub on the left, a count hint, optional
-    # platform selectors, then a Skip / Fill / Re-run segmented control.
+    # One row per activity. The name + description sit on the left above a meta
+    # line (counts + optional Windows/Linux platform toggles); the Skip / Fill /
+    # Re-run segmented control is pinned to the right and stays vertically
+    # centred, so every row's primary control lines up no matter how much
+    # metadata it carries - and the control can never be clipped by the dialog
+    # edge. This scales cleanly as activities and platforms grow.
     '.cidash-hist-acts{display:flex;flex-direction:column;gap:7px}'
     '.cidash-hist-actsempty{color:var(--fg-muted);font-size:.85em;padding:4px 2px}'
-    '.cidash-hist-act{display:grid;grid-template-columns:minmax(170px,1fr) max-content max-content;grid-template-areas:"info count controls";gap:8px 10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}'
-    '.cidash-hist-act.has-plats{grid-template-columns:minmax(160px,1fr) max-content max-content max-content;grid-template-areas:"info count plats controls"}'
-    # A skipped activity dims only its name + count (so it reads as "off") while its
+    '.cidash-hist-act{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"info controls" "meta controls";gap:3px 16px;align-items:center;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}'
+    # A skipped activity dims only its name + meta (so it reads as "off") while its
     # Skip / Fill / Re-run control stays full-strength and clearly clickable -
     # dimming the whole row made "Clear" look like nothing could be selected.
-    '.cidash-hist-act.skip .cidash-hist-actinfo,.cidash-hist-act.skip .cidash-hist-actcount{opacity:.5}'
+    '.cidash-hist-act.skip .cidash-hist-actinfo,.cidash-hist-act.skip .cidash-hist-actmeta{opacity:.5}'
     '.cidash-hist-actinfo{grid-area:info;min-width:0}'
     '.cidash-hist-actname{font-size:.9em;font-weight:600}'
     '.cidash-hist-actsub{color:var(--fg-muted);font-size:.82em;margin-top:1px;line-height:1.4}'
-    '.cidash-hist-actcount{grid-area:count;justify-self:end;font-size:.74em;color:var(--fg-muted);white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}'
-    '.cidash-hist-plats{grid-area:plats;justify-self:end;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;font-size:.74em;color:var(--fg-muted)}'
-    '.cidash-hist-plats label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}'
+    # Meta line under the name: revision counts plus any platform toggles, wrapping
+    # gracefully instead of pushing the control off-screen.
+    '.cidash-hist-actmeta{grid-area:meta;display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px;min-width:0;font-size:.76em;color:var(--fg-muted)}'
+    '.cidash-hist-actcount{white-space:nowrap;font-variant-numeric:tabular-nums}'
+    '.cidash-hist-actcount:empty{display:none}'
+    '.cidash-hist-plats{display:flex;align-items:center;gap:12px;flex-wrap:wrap}'
+    '.cidash-hist-plats label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none}'
     '.cidash-hist-plats input{accent-color:var(--link);width:13px;height:13px;margin:0}'
-    '.cidash-seg{grid-area:controls;justify-self:end;display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}'
-    '.cidash-seg button{border:0;background:transparent;color:var(--fg-muted);padding:5px 11px;font-size:.78em;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.5}'
+    '.cidash-seg{grid-area:controls;justify-self:end;align-self:center;display:inline-flex;flex:0 0 auto;border:1px solid var(--border);border-radius:7px;overflow:hidden}'
+    '.cidash-seg button{border:0;background:transparent;color:var(--fg-muted);padding:6px 13px;font-size:.78em;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.5}'
     '.cidash-seg button+button{border-left:1px solid var(--border)}'
     '.cidash-seg button.on{background:var(--link);color:#fff}'
     '.cidash-seg button:disabled{opacity:.34;cursor:default}'
     '.cidash-seg button:not(.on):not(:disabled):hover{background:var(--surface);color:var(--fg)}'
-    '@media(max-width:640px){.cidash-hist-act,.cidash-hist-act.has-plats{grid-template-columns:1fr;grid-template-areas:"info" "count" "plats" "controls"}.cidash-hist-act:not(.has-plats){grid-template-areas:"info" "count" "controls"}.cidash-hist-actcount,.cidash-hist-plats,.cidash-seg{justify-self:start}.cidash-hist-plats{flex-wrap:wrap}}'
+    # On narrow viewports the row collapses to a single column: name, meta, then
+    # the control on its own line, all left-aligned.
+    '@media(max-width:560px){.cidash-hist-act{grid-template-columns:1fr;grid-template-areas:"info" "meta" "controls";gap:7px 0}.cidash-seg{justify-self:start}}'
     '.cidash-hist-summary{font-size:.84em;color:var(--fg-muted);margin:0 0 12px}'
     '.cidash-hist-summary b{color:var(--fg)}'
 )
@@ -1199,7 +1208,7 @@ run_dialog = (r"""
     </div>
   </div>
   <div id="cidash-hist-modal" onclick="if(event.target===this)cidashHistClose()" style="display:none;position:fixed;inset:0;z-index:310;background:rgba(0,0,0,.55)">
-    <div role="dialog" aria-modal="true" aria-labelledby="cidash-hist-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(600px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
+    <div role="dialog" aria-modal="true" aria-labelledby="cidash-hist-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(640px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">
         <strong id="cidash-hist-title" style="font-size:.95em">Populate dashboard history</strong>
         <button onclick="cidashHistClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
@@ -2296,8 +2305,7 @@ run_dialog = (r"""
         var m=CAP_META[cap]||[cap,''];
         h += '<div class="cidash-hist-act'+(histHasPlatformPicker(cap)?' has-plats':'')+'" id="cidash-hist-actrow-'+cap+'">'
           + '<div class="cidash-hist-actinfo"><div class="cidash-hist-actname">'+esc(m[0])+'</div><div class="cidash-hist-actsub">'+esc(m[1])+'</div></div>'
-          + '<span class="cidash-hist-actcount" id="cidash-hist-count-'+cap+'"></span>'
-          + histPlatformHtml(cap)
+          + '<div class="cidash-hist-actmeta"><span class="cidash-hist-actcount" id="cidash-hist-count-'+cap+'"></span>'+histPlatformHtml(cap)+'</div>'
           + '<span class="cidash-seg" id="cidash-hist-seg-'+cap+'" role="group" aria-label="'+esc(m[0])+' mode">'
           + '<button type="button" data-cap="'+cap+'" data-mode="off">Skip</button>'
           + '<button type="button" data-cap="'+cap+'" data-mode="fill">'+(cap==='snapshots'?'Render':'Fill')+'</button>'
