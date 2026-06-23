@@ -1,11 +1,23 @@
 {
   "schemaVersion": 1,
-  "version": "3.44.0",
+  "version": "3.44.1",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.44.1",
+        "date": "2026-06-23",
+        "title": "Populate history dialog: activity controls always fit and line up",
+        "type": "patch",
+        "summary": "Reworks the Populate dashboard history dialog so the per-activity Skip / Fill / Re-run controls can no longer be clipped by the dialog edge. Each activity row now places the name and description on the left with a meta line beneath (revision counts plus any Windows/Linux platform toggles), and pins the segmented control to the right where it stays vertically centred and aligned across every row - no matter how much metadata it carries. The layout reflows to a single stacked column on narrow and mobile screens, and the dialog is a little wider so it has room to breathe.",
+        "highlights": [
+          "Skip / Fill / Re-run controls are never cropped, even on rows that show platform toggles and long counts.",
+          "Every activity's control lines up on the right for a clean, scannable layout that scales as new activities are added.",
+          "Renders correctly on mobile - rows collapse to a single, left-aligned column."
+        ]
+      },
       {
         "version": "3.44.0",
         "date": "2026-06-23",
