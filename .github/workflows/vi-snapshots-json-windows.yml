@@ -31,6 +31,10 @@ on:
         description: "Commit SHA whose VIs should be rendered; blank = the dispatched ref's HEAD"
         required: false
         default: ""
+      force:
+        description: "Re-render Windows VI Browser 2.0 JSON even when outputs already exist"
+        required: false
+        default: "false"
       render_timeout:
         description: "Per-VI render timeout (Go duration, e.g. 5m)"
         required: false
@@ -176,6 +180,12 @@ jobs:
           mkdir -p _winout/by-blob
           target_sha="${{ github.event.inputs.target_sha || github.sha }}"
           git cat-file -e "$target_sha^{commit}"
+          force_input="${{ github.event.inputs.force || 'false' }}"
+          case "$force_input" in
+            [Tt][Rr][Uu][Ee]|1|[Yy][Ee][Ss]|[Oo][Nn]) force_render=1 ;;
+            *) force_render=0 ;;
+          esac
+          echo "force render: $force_render"
           rm -rf _target
           mkdir -p _target
           git archive "$target_sha" | tar -x -C _target
@@ -190,7 +200,7 @@ jobs:
           if [ -n "$vi_input" ]; then
             # Single-VI smoke test: one "<blob>\t<relpath>" line.
             blob=$(git rev-parse "$target_sha:$vi_input")
-            if [ -f "_winout/by-blob/${blob:0:2}/$blob.windows.json" ]; then
+            if [ "$force_render" != "1" ] && [ -f "_winout/by-blob/${blob:0:2}/$blob.windows.json" ]; then
               : > _winout/worklist.tsv
               echo "single-VI worklist: $vi_input ($blob) already has Windows JSON"
             else
@@ -201,7 +211,14 @@ jobs:
             # Reuse the same content-addressing worklist builder the Linux path uses,
             # but skip only Windows renders so Linux <blob>.json never masks missing
             # Windows <blob>.windows.json output.
-            bash .github/labview/build-json-worklist.sh "$PWD" "$target_sha" _winout/by-blob _winout/worklist.tsv .windows.json
+            if [ "$force_render" = "1" ]; then
+              rm -rf _winout/.force-empty-existing
+              mkdir -p _winout/.force-empty-existing
+              existing_dir=_winout/.force-empty-existing
+            else
+              existing_dir=_winout/by-blob
+            fi
+            bash .github/labview/build-json-worklist.sh "$PWD" "$target_sha" "$existing_dir" _winout/worklist.tsv .windows.json
           fi
           echo "worklist lines: $(wc -l < _winout/worklist.tsv | tr -d ' ')"
 

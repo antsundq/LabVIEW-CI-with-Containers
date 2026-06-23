@@ -36,6 +36,10 @@ on:
         description: "Commit SHA whose VIs should be rendered in head mode; blank = the dispatched ref's HEAD"
         required: false
         default: ""
+      force:
+        description: "Re-render VI Browser 2.0 JSON even when outputs already exist"
+        required: false
+        default: "false"
   workflow_run:
     workflows: ["VI Snapshots and VI Browser"]
     types: [completed]
@@ -151,6 +155,7 @@ jobs:
           # workflow_dispatch passes mode and target_sha; workflow_run has none -> dispatched ref HEAD.
           MODE: ${{ github.event.inputs.mode || 'head' }}
           TARGET_SHA: ${{ github.event.inputs.target_sha || github.sha }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
           IMAGE: ${{ steps.pull.outputs.image }}
           OUT: ${{ github.workspace }}/ci-out/vi-snapshots
           GHP: ${{ github.workspace }}/_ghp

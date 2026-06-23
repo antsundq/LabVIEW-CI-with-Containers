@@ -105,6 +105,35 @@ def snapshot_coverage(sha):
     _snap_cov_cache[sha] = res
     return res
 
+_json_blobs_cache = {}
+def rendered_json_blobs(platform):
+    key = 'windows' if platform == 'windows' else 'linux'
+    if key in _json_blobs_cache:
+        return _json_blobs_cache[key]
+    name = 'json-blobs.windows.json' if key == 'windows' else 'json-blobs.json'
+    data = http_json(f"{pages_url}/vi-snapshots/{name}")
+    blobs = set()
+    if isinstance(data, list):
+        blobs = {b for b in data if isinstance(b, str)}
+    _json_blobs_cache[key] = blobs
+    return blobs
+
+_snap2_cov_cache = {}
+def snapshot2_coverage(sha, platform):
+    key = (sha, platform)
+    if key in _snap2_cov_cache:
+        return _snap2_cov_cache[key]
+    vis = [v for v in vi_tree(sha) if str(v.get('vi_rel', '')).lower().endswith('.vi')]
+    total = len(vis)
+    have = 0
+    if total:
+        rb = rendered_json_blobs(platform)
+        if rb:
+            have = sum(1 for v in vis if v.get('blob') in rb)
+    res = (have, total)
+    _snap2_cov_cache[key] = res
+    return res
+
 _mc_cache = {}
 def masscompile_summary(sha):
     # {total, ok, bad, percent, status, exit, duration} written by masscompile.ps1
@@ -303,6 +332,9 @@ RUN_TARGETS = {
         # every consumer's vi-snapshots.yml (the "Populate history" card uses it),
         # so this needs no workflow-file change to reach existing installs.
         'all': {'wf': 'vi-snapshots.yml', 'inputs': {'mode': 'backfill'}}}},
+      'snapshots2': {'label': 'VI Browser 2.0 Snapshots', 'platforms': {
+        'windows': {'wf': 'vi-snapshots-json-windows.yml', 'inputs': {'target_sha': '{sha}'}},
+        'linux':   {'wf': 'vi-snapshots-json.yml',         'inputs': {'mode': 'head', 'target_sha': '{sha}'}}}},
     # Unit tests run in the Windows worker only: Caraya and VI Tester are
     # VIPM packages (Windows-only). The runner emits JUnit that
     # build-unittest-report.py normalises into one report.
@@ -330,7 +362,8 @@ for _cap, _d in RUN_TARGETS.items():
         if _p.get('wf'):
             _WF_TO_CAP[_p['wf']] = _cap
 _CAP_RUN_LABEL = {'masscompile': 'compile', 'vi-analyzer': 'analyze', 'vidiff': 'diff',
-                  'snapshots': 'snapshots', 'unit-tests': 'tests', 'antidoc': 'docs'}
+                  'snapshots': 'snapshots', 'snapshots2': '2.0 snapshots',
+                  'unit-tests': 'tests', 'antidoc': 'docs'}
 
 def fetch_active_runs():
     by_sha = {}
@@ -502,7 +535,19 @@ for c in commits_data:
             'vis': vi_tree(sha),
         })
         # Newest-first list of revisions the history dialog can populate.
-        hist_revs.append({'sha': sha, 'short': short, 'msg': msg})
+        _s2w_have, _s2w_total = snapshot2_coverage(sha, 'windows')
+        _s2l_have, _s2l_total = snapshot2_coverage(sha, 'linux')
+        if _s2w_have > 0 or _s2l_have > 0:
+            caps_ran.add('snapshots2')
+        hist_revs.append({
+            'sha': sha,
+            'short': short,
+            'msg': msg,
+            'snapshots2': {
+                'windows': {'have': _s2w_have, 'total': _s2w_total},
+                'linux': {'have': _s2l_have, 'total': _s2l_total},
+            },
+        })
 
     # Fetch commit statuses
     statuses_data = gh_get(f'commits/{sha}/statuses') or []
@@ -699,7 +744,10 @@ for c in commits_data:
                 _kind, _txt = 'warn', f'{_have}/{_total}'
                 _tip = (f'{_have} of {_total} VIs have snapshots; {_total - _have} missing '
                         f'- run this revision or use Populate history to backfill')
-            snap_badge = (f'<td style="text-align:center">'
+            _snap_ts = (pick_status('CI / VI Snapshots') or {}).get('created_at', '')
+            _snap_done = 'true' if _have >= _total else 'false'
+            snap_badge = (f'<td style="text-align:center" class="cidash-cap-cell" data-cap="snapshots" '
+                    f'data-sha="{sha}" data-parent="{parent}" data-short="{short}" data-ts="{_snap_ts}" data-done="{_snap_done}">'
                           f'{_chip(_kind, _txt, _href, _tip)}</td>')
 
     # Unit Tests column: show the percentage of tests that failed, sourced from
@@ -1058,8 +1106,8 @@ run_dialog_css = (
     '.cidash-hist-quick{display:flex;flex-wrap:wrap;gap:6px}'
     '.cidash-hist-chip{border:1px solid var(--border);background:var(--bg);color:var(--fg);border-radius:999px;padding:4px 11px;font-size:.76em;font-weight:600;cursor:pointer;font-family:inherit}'
     '.cidash-hist-chip:hover{border-color:var(--link);color:var(--link)}'
-    # One row per activity: name + sub on the left, a count hint, then a 3-way
-    # Skip / Fill / Re-run segmented control. Snapshots only gets Skip / Render.
+    # One row per activity: name + sub on the left, a count hint, optional
+    # platform selectors, then a Skip / Fill / Re-run segmented control.
     '.cidash-hist-acts{display:flex;flex-direction:column;gap:7px}'
     '.cidash-hist-actsempty{color:var(--fg-muted);font-size:.85em;padding:4px 2px}'
     '.cidash-hist-act{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}'
@@ -1071,6 +1119,9 @@ run_dialog_css = (
     '.cidash-hist-actname{font-size:.9em;font-weight:600}'
     '.cidash-hist-actsub{color:var(--fg-muted);font-size:.82em;margin-top:1px;line-height:1.4}'
     '.cidash-hist-actcount{font-size:.74em;color:var(--fg-muted);white-space:nowrap;flex:0 0 auto;text-align:right;margin-left:auto;font-variant-numeric:tabular-nums}'
+    '.cidash-hist-plats{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.74em;color:var(--fg-muted);flex:0 1 auto}'
+    '.cidash-hist-plats label{display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none}'
+    '.cidash-hist-plats input{accent-color:var(--link);width:13px;height:13px;margin:0}'
     '.cidash-seg{display:inline-flex;flex:0 0 auto;border:1px solid var(--border);border-radius:7px;overflow:hidden}'
     '.cidash-seg button{border:0;background:transparent;color:var(--fg-muted);padding:5px 11px;font-size:.78em;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.5}'
     '.cidash-seg button+button{border-left:1px solid var(--border)}'
@@ -1850,26 +1901,30 @@ run_dialog = (r"""
     // history doesn't trip GitHub's secondary rate limits. Resolves with an
     // {ok, err, total} tally; the caller owns its own status line + buttons.
     function dispatchCells(cells, statusFn){
-      var perRev=[]; var snapShas=[]; var sawSnap=false;
+      var perRev=[]; var snapShas=[]; var sawSnap=false; var snapForce=false;
       cells.forEach(function(x){
-        if(x.cap==='snapshots'){ sawSnap=true; snapShas.push(x.sha); }
+        if(x.cap==='snapshots'){
+          sawSnap=true; snapShas.push(x.sha);
+          if(x.mode==='rerun' || x.done) snapForce=true;
+        }
         else if(!(x.cap==='vidiff' && !x.parent)){ perRev.push(x); }   // a root commit has no base to diff
       });
       perRev.sort(function(a,b){ return b.order - a.order; });   // oldest first
-      var total=perRev.length + (sawSnap?1:0);
+      var total=perRev.reduce(function(n,x){ return n + cellPlatforms(x).length; }, 0) + (sawSnap?1:0);
       var t0=Date.now(); var ok=0, err=0, done=0;
       // Paint EVERY targeted cell as "Queued" up front, in one synchronous pass, so
       // the whole batch lights up the instant you click - independent of the throttled
       // dispatch chain below. A dispatch that truly fails then reverts just its own
       // cell, and a thrown error mid-chain can no longer leave the earlier cells un-queued.
       if(sawSnap){ snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); }
-      perRev.forEach(function(x){ var d=RT[x.cap]; if(d) markQueued(x.cap, x.sha, Object.keys(d.platforms), x.parent, t0); });
+      perRev.forEach(function(x){ var d=RT[x.cap]; if(d) markQueued(x.cap, x.sha, cellPlatforms(x), x.parent, t0); });
       statusFn('Queuing '+total+' workflow'+(total>1?'s':'')+'\u2026', null);
       var chain=Promise.resolve();
       // 1) Snapshots — one backfill run for the whole history (oldest→newest, deduped).
       if(sawSnap){
         chain=chain.then(function(){
-          return dispatchOne('vi-snapshots.yml', { mode:'backfill' }).then(function(r){
+          var inputs={ mode:'backfill' }; if(snapForce) inputs.force='true';
+          return dispatchOne('vi-snapshots.yml', inputs).then(function(r){
             done++;
             if(r.ok){ ok++; captureSnapshotRun(t0); }
             else { err++; if(r.status===401) clearTok(); snapShas.forEach(function(sha){ qForget('snapshots', sha); }); }
@@ -1881,10 +1936,14 @@ run_dialog = (r"""
       perRev.forEach(function(x){
         chain=chain.then(function(){
           var def=RT[x.cap]; if(!def){ return; }
-          var plats=Object.keys(def.platforms);
-          var jobs=plats.map(function(k){ var p=def.platforms[k]; return dispatchOne(p.wf, bfInputs(p, x.sha, x.parent)).then(function(r){ r.plat=k; return r; }); });
+          var plats=cellPlatforms(x);
+          var jobs=plats.map(function(k){
+            var p=def.platforms[k]; var inputs=bfInputs(p, x.sha, x.parent);
+            if(x.cap==='snapshots2' && (x.mode==='rerun' || x.done)) inputs.force='true';
+            return dispatchOne(p.wf, inputs).then(function(r){ r.plat=k; return r; });
+          });
           return Promise.all(jobs).then(function(results){
-            done++;
+            done += results.length;
             if(results.some(function(r){return r.status===401;})) clearTok();
             var okPlats=results.filter(function(r){return r.ok;}).map(function(r){return r.plat;});
             if(okPlats.length){ ok++; markQueued(x.cap, x.sha, okPlats, x.parent, t0); captureRuns(x.cap, x.sha); }
@@ -1937,15 +1996,36 @@ run_dialog = (r"""
     var HIST = __HIST__;                        // [{sha, short, msg}] newest-first (project revisions)
     var RAN = __CAPS_RAN__;                     // {cap:1} caps with a result/active run somewhere in history
     var CAP_META = {                            // label + sub for each known capability
-      'snapshots':   ['VI Snapshots', 'Renders every changed VI (one backfill pass)'],
+      'snapshots':   ['VI Snapshots', 'Renders every changed VI (classic HTML snapshots)'],
+      'snapshots2':  ['VI Browser 2.0 Snapshots', 'Renders position-aware snapshots for the VI Browser 2.0 view'],
       'vidiff':      ['VIDiff',       'Visual diff of the VIs each revision changed'],
       'masscompile': ['Mass Compile', 'Compiles the whole project, each revision'],
       'vi-analyzer': ['VI Analyzer',  'Runs the VI Analyzer suite, each revision'],
       'unit-tests':  ['Unit Tests',   'Runs the unit-test suite, each revision'],
       'antidoc':     ['Antidoc',      'Generates project documentation, each revision']
     };
-    var CAP_ORDER = ['snapshots','vidiff','masscompile','vi-analyzer','unit-tests','antidoc'];
-    var DIFF_CAPS = { snapshots:1, vidiff:1 };  // the lean "diff-based" subset
+    var CAP_ORDER = ['snapshots','snapshots2','vidiff','masscompile','vi-analyzer','unit-tests','antidoc'];
+    var DIFF_CAPS = { snapshots:1, snapshots2:1, vidiff:1 };  // the lean "diff-based" subset
+    var PLATFORM_CAPS = { snapshots2:1, vidiff:1, masscompile:1, 'vi-analyzer':1 };
+    var platState = {};                         // cap id -> selected platform keys for history rows
+    function capPlatforms(capId){ return (RT[capId] && RT[capId].platforms) ? Object.keys(RT[capId].platforms) : []; }
+    function histHasPlatformPicker(capId){ return !!PLATFORM_CAPS[capId] && capPlatforms(capId).length > 1; }
+    function histSelectedPlatforms(capId){
+      var keys=capPlatforms(capId);
+      if(!histHasPlatformPicker(capId)) return keys;
+      var selected=(platState[capId] || keys.slice()).filter(function(k){ return keys.indexOf(k)>=0; });
+      return selected.length ? selected : keys;
+    }
+    function cellPlatforms(x){ return x.platform ? [x.platform] : histSelectedPlatforms(x.cap); }
+    function histPlatformHtml(capId){
+      if(!histHasPlatformPicker(capId)) return '';
+      var selected=histSelectedPlatforms(capId);
+      var label=(CAP_META[capId]||[capId])[0];
+      return '<span class="cidash-hist-plats" role="group" aria-label="'+esc(label)+' platforms">'
+        + capPlatforms(capId).map(function(k){
+            return '<label><input type="checkbox" class="cidash-hist-plat" data-cap="'+esc(capId)+'" data-platform="'+esc(k)+'" '+(selected.indexOf(k)>=0?'checked':'')+'>'+esc(cap(k))+'</label>';
+          }).join('') + '</span>';
+    }
     // The activities offered are exactly the workers THIS repo actually has: any
     // capability with at least one empty (never-run) cell to fill, plus any that
     // already has results (shown so the picture is complete - queuing only ever
@@ -1953,6 +2033,7 @@ run_dialog = (r"""
     // installed never appears and a newly-added one (e.g. Unit Tests) always does.
     function histInstalledCaps(){
       var seen={}; bfCells().forEach(function(x){ seen[x.cap]=1; });
+      if(HIST.length && RT.snapshots2) seen.snapshots2=1;
       return CAP_ORDER.filter(function(c){ return seen[c] || RAN[c]; });
     }
     function histModal(){ return document.getElementById('cidash-hist-modal'); }
@@ -1977,10 +2058,20 @@ run_dialog = (r"""
                      parent:a.getAttribute('data-parent')||'', order:idx, done:false });
         });
         Array.prototype.forEach.call(tr.querySelectorAll('td.cidash-cap-cell'), function(td){
+          var done = td.getAttribute('data-done') === 'false' ? false : true;
           out.push({ cap:td.getAttribute('data-cap'), sha:td.getAttribute('data-sha'),
-                     parent:td.getAttribute('data-parent')||'', order:idx, done:true });
+                     parent:td.getAttribute('data-parent')||'', order:idx, done:done });
         });
       });
+      if(RT.snapshots2){
+        HIST.forEach(function(r, idx){
+          var cov=r.snapshots2||{};
+          capPlatforms('snapshots2').forEach(function(platform){
+            var c=cov[platform]||{}; var total=Number(c.total||0), have=Number(c.have||0);
+            if(total>0){ out.push({ cap:'snapshots2', sha:r.sha, parent:'', order:idx, done:(have>=total), platform:platform }); }
+          });
+        });
+      }
       return out;
     }
     function histScopeMode(){ var r=document.querySelector('input[name="cidash-hist-scope"]:checked'); return r ? r.value : 'all'; }
@@ -2020,15 +2111,14 @@ run_dialog = (r"""
       //   off    -> nothing
       //   fill   -> only the empty (never-run) cells          (the old default)
       //   rerun  -> empty AND already-done cells: fill gaps and replace existing results
-      // Snapshots is content-addressed: its one backfill run only ever renders the
-      // MISSING blobs, so it has no meaningful "re-run" \u2014 it always behaves as fill.
       var inc=histIncludedShas(); var out=[];
       histAllCells().forEach(function(x){
         if(!inc[x.sha]) return;
         var mode=actMode[x.cap]||'off'; if(mode==='off') return;
         if(x.cap==='vidiff' && !x.parent) return;        // a root commit has no base to diff
-        if(x.cap==='snapshots'){ if(!x.done) out.push(x); return; }
+        if(x.platform && histSelectedPlatforms(x.cap).indexOf(x.platform)<0) return;
         if(mode==='fill' && x.done) return;              // fill leaves finished cells alone
+        x.mode=mode;
         out.push(x);
       });
       return out;
@@ -2040,13 +2130,13 @@ run_dialog = (r"""
       histAllCells().forEach(function(x){
         if(!inc[x.sha]) return;
         if(x.cap==='vidiff' && !x.parent) return;
+        if(x.platform && histSelectedPlatforms(x.cap).indexOf(x.platform)<0) return;
         var c=by[x.cap]||(by[x.cap]={fill:0,done:0});
         if(x.done) c.done++; else c.fill++;
       });
       return by;
     }
     function histCountText(cap, c){
-      if(cap==='snapshots'){ return c.fill>0 ? (c.fill+' to render') : 'up to date'; }
       if(c.fill>0 && c.done>0) return c.fill+' missing \u00b7 '+c.done+' done';
       if(c.fill>0) return c.fill+' to fill';
       if(c.done>0) return 'all '+c.done+' done';
@@ -2058,12 +2148,10 @@ run_dialog = (r"""
       // queue at least one run, so the highlighted segment is never also disabled
       // (the old cause of a lit-but-greyed "Re-run"). Widening the scope later can
       // re-enable the original intent because actMode itself is left untouched.
-      //   snapshots -> only ever fills the missing renders (content-addressed)
       //   fill      -> needs a missing cell, else there is nothing to fill (Skip)
       //   rerun     -> every selected revision with this activity; existing results
       //                are replaced and missing cells are filled
       if(mode==='off') return 'off';
-      if(cap==='snapshots') return c.fill>0 ? 'fill' : 'off';
       if(mode==='rerun')    return (c.done>0 || c.fill>0) ? 'rerun' : 'off';
       return c.fill>0 ? 'fill' : 'off';
     }
@@ -2103,7 +2191,7 @@ run_dialog = (r"""
         if(!HIST.length){ sum.innerHTML='No project revisions to populate yet \u2014 commit some VIs first.'; }
         else if(!runs){
           var anyOn=histInstalledCaps().some(function(c){ return (actMode[c]||'off')!=='off'; });
-          var canRe=histInstalledCaps().some(function(c){ var cc=counts[c]||{}; return c!=='snapshots' && (actMode[c]||'off')==='fill' && (cc.done||0)>0; });
+          var canRe=histInstalledCaps().some(function(c){ var cc=counts[c]||{}; return (actMode[c]||'off')==='fill' && (cc.done||0)>0; });
           if(canRe){ sum.innerHTML='Nothing to fill \u2014 the selected revisions already have these results. Switch an activity to <b>Re-run</b> to rebuild them.'; }
           else if(anyOn){ sum.innerHTML='Nothing to queue for the selected revisions and activities.'; }
           else { sum.innerHTML='Pick at least one activity below \u2014 every one is set to <b>Skip</b>.'; }
@@ -2116,7 +2204,6 @@ run_dialog = (r"""
       var go=document.getElementById('cidash-hist-go'); if(go) go.disabled = !runs;
     }
     function histSetMode(cap, mode){
-      if(cap==='snapshots' && mode==='rerun') mode='fill';   // snapshots only ever backfills gaps
       actMode[cap]=mode; histRefresh();
     }
     function histPreset(kind){
@@ -2125,7 +2212,7 @@ run_dialog = (r"""
       // and "diff-based" toggles, now as one-click starting points over per-row control.
       histInstalledCaps().forEach(function(cap){
         if(kind==='fill') actMode[cap]='fill';
-        else if(kind==='rerun') actMode[cap]=(cap==='snapshots'?'fill':'rerun');
+        else if(kind==='rerun') actMode[cap]='rerun';
         else if(kind==='clear') actMode[cap]='off';
         else if(kind==='diff') actMode[cap]=DIFF_CAPS[cap]?'fill':'off';
         else if(kind==='new') actMode[cap]=RAN[cap]?'off':'fill';
@@ -2166,14 +2253,15 @@ run_dialog = (r"""
       if(!instCaps.length){
         h += '<div class="cidash-hist-actsempty">No runnable activities found for this repository.</div>';
       } else instCaps.forEach(function(cap){
-        var m=CAP_META[cap]||[cap,'']; var isSnap=(cap==='snapshots');
+        var m=CAP_META[cap]||[cap,''];
         h += '<div class="cidash-hist-act" id="cidash-hist-actrow-'+cap+'">'
           + '<div class="cidash-hist-actinfo"><div class="cidash-hist-actname">'+esc(m[0])+'</div><div class="cidash-hist-actsub">'+esc(m[1])+'</div></div>'
           + '<span class="cidash-hist-actcount" id="cidash-hist-count-'+cap+'"></span>'
+          + histPlatformHtml(cap)
           + '<span class="cidash-seg" id="cidash-hist-seg-'+cap+'" role="group" aria-label="'+esc(m[0])+' mode">'
           + '<button type="button" data-cap="'+cap+'" data-mode="off">Skip</button>'
-          + '<button type="button" data-cap="'+cap+'" data-mode="fill">'+(isSnap?'Render':'Fill')+'</button>'
-          + (isSnap?'':'<button type="button" data-cap="'+cap+'" data-mode="rerun">Re-run</button>')
+          + '<button type="button" data-cap="'+cap+'" data-mode="fill">'+(cap==='snapshots'?'Render':'Fill')+'</button>'
+          + '<button type="button" data-cap="'+cap+'" data-mode="rerun">Re-run</button>'
           + '</span></div>';
       });
       h += '</div></div>';
@@ -2195,6 +2283,13 @@ run_dialog = (r"""
       instCaps.forEach(function(cap){ actMode[cap]='fill'; });   // open with every activity on Fill (gaps only)
       Array.prototype.forEach.call(document.querySelectorAll('.cidash-hist-chip'), function(b){ b.addEventListener('click', function(){ histPreset(b.getAttribute('data-preset')); }); });
       Array.prototype.forEach.call(document.querySelectorAll('.cidash-seg button'), function(b){ b.addEventListener('click', function(){ if(b.disabled) return; histSetMode(b.getAttribute('data-cap'), b.getAttribute('data-mode')); }); });
+      Array.prototype.forEach.call(document.querySelectorAll('.cidash-hist-plat'), function(b){ b.addEventListener('change', function(){
+        var cap=b.getAttribute('data-cap'); var platform=b.getAttribute('data-platform'); var keys=capPlatforms(cap);
+        var selected=(platState[cap] || keys.slice()).filter(function(k){ return k!==platform; });
+        if(b.checked) selected.push(platform);
+        platState[cap]=selected.filter(function(k,i,a){ return keys.indexOf(k)>=0 && a.indexOf(k)===i; });
+        histRender();
+      }); });
       Array.prototype.forEach.call(document.querySelectorAll('input[name="cidash-hist-scope"]'), function(r){ r.addEventListener('change', function(){ histScopeApply(); histRefresh(); }); });
       var hf=document.getElementById('cidash-hist-from'); if(hf) hf.addEventListener('change', histRefresh);
       var ht=document.getElementById('cidash-hist-to'); if(ht) ht.addEventListener('change', histRefresh);
