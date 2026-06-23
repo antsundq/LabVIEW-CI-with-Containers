@@ -1,11 +1,23 @@
 {
   "schemaVersion": 1,
-  "version": "3.46.2",
+  "version": "3.46.3",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.46.3",
+        "date": "2026-06-23",
+        "title": "Capability chooser stays closed on first load",
+        "type": "patch",
+        "summary": "Hardens the Apply page capability chooser so it stays collapsed on initial load even if the browser restores prior details state or a local copy carries stale markup. The chooser body is explicitly hidden while the details element is closed, and initialization closes the chooser after capabilities render.",
+        "highlights": [
+          "Adds an explicit closed-state CSS rule for the capability chooser body.",
+          "Closes the capability chooser during Apply page initialization after capabilities render.",
+          "Keeps the 3.46.2 worker-image warning and confirmation behavior unchanged."
+        ]
+      },
       {
         "version": "3.46.2",
         "date": "2026-06-23",
