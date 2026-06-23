@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "9c822baa93f3e9fedc344534b39a3c941344587c",
+  "sha": "ef03546c9befb9c73caaf9c4827ea62a1498bc3a",
   "revisions": [
+    {
+      "sha": "ef03546c9befb9c73caaf9c4827ea62a1498bc3a",
+      "short": "ef03546",
+      "message": "Use desktop width in history activity rows",
+      "author": "Elijah Kerry",
+      "date": "2026-06-23T02:12:45Z"
+    },
     {
       "sha": "9c822baa93f3e9fedc344534b39a3c941344587c",
       "short": "9c822ba",
@@ -697,13 +704,6 @@
       "date": "2026-06-20T16:24:14Z"
     },
     {
-      "sha": "b89ad0d04a692702e92af441328f66e5c56ae300",
-      "short": "b89ad0d",
-      "message": "catalog: add the release entry for the VI Browser back-link removal (v3.24.4)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-20T15:08:22Z"
-    },
-    {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
       "short": "12553d6",
       "message": "added utf files",
@@ -1086,7 +1086,7 @@
         }
       ],
       "labview_version": "2026",
-      "version": "win-8913c01f4cc4"
+      "version": "win-091363be96cb"
     },
     {
       "key": "linux",
