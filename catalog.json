@@ -1,11 +1,23 @@
 {
   "schemaVersion": 1,
-  "version": "3.42.0",
+  "version": "3.42.1",
   "name": "LabVIEW CI",
   "description": "Portable, repo-agnostic CI/CD capabilities for LabVIEW repositories: mass compile, VI Analyzer, VIDiff comparison reports, VI snapshots / VI Browser, and a status dashboard. Driven entirely by this catalog so the configurator UI and the installer stay in sync and new capabilities are a one-entry change.",
   "history": {
     "comment": "Release notes for the tooling, newest first. `version` (above) is the CURRENT published release and MUST equal releases[0].version. The dashboard version badge and the What's New dialog read these notes to tell a consumer what changed between the version they run and the latest this source repo publishes. Each published version should also be tagged v<version> in this repo so consumers can pin an update to a specific release.",
     "releases": [
+      {
+        "version": "3.42.1",
+        "date": "2026-06-23",
+        "title": "Show .dragon dependencies under the VIPM and NI Packages tabs",
+        "type": "patch",
+        "summary": "A .dragon file is a manifest that tells VIPM and/or NI Package Manager what to install, not a separate package source. The Dependencies page no longer has a separate Dragon tab; instead each .dragon file is listed under the VIPM / VIPC tab (its VIPM dependencies) and the NI Packages tab (its NIPM dependencies), attributed to the file, with the Win Beta install status alongside.",
+        "highlights": [
+          "Removes the standalone Dragon tab.",
+          "Lists each .dragon file's VIPM dependencies under VIPM / VIPC and its NIPM dependencies under NI Packages, grouped by source file with declared versions and NIPM feed names.",
+          "Keeps the per-item Win Beta install status (installed, wrong version, missing, unsupported, conflict, or pending)."
+        ]
+      },
       {
         "version": "3.42.0",
         "date": "2026-06-22",
