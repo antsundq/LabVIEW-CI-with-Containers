@@ -379,6 +379,23 @@ jobs:
         shell: powershell
         run: ./.github/labview/ensure-docker.ps1
 
+      # crane (go-containerregistry) copies images registry-to-registry with
+      # cross-repo blob mounting -- no multi-GB pull/push through the runner, and
+      # no dependency on docker buildx (which is not installed on the Windows
+      # runner). It authenticates from the docker config written by docker/login.
+      - name: Set up crane (registry copy tool)
+        shell: powershell
+        run: |
+          $ver = 'v0.20.2'
+          $url = "https://github.com/google/go-containerregistry/releases/download/$ver/go-containerregistry_Windows_x86_64.tar.gz"
+          $tgz = Join-Path $env:RUNNER_TEMP 'crane.tar.gz'
+          $dir = Join-Path $env:RUNNER_TEMP 'crane'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Invoke-WebRequest -Uri $url -OutFile $tgz -UseBasicParsing
+          tar -xzf $tgz -C $dir
+          "$dir" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$dir\crane.exe" version
+
       - name: Prepare LCWC base image
         id: base
         shell: powershell
@@ -411,19 +428,15 @@ jobs:
           }
 
           # Resolve the base image's manifest digest WITHOUT pulling the multi-GB
-          # image down to the runner -- imagetools talks to the registry directly.
-          # Parse the digest from the default inspect output (the --format flag is
-          # not available on the older buildx shipped on the Windows runner). Only
-          # the VIPC-layer path (docker build FROM the base) needs the image locally,
-          # and docker build pulls it then; the no-VIPC copy path never downloads it.
-          $inspectText = (docker buildx imagetools inspect $baseImage 2>$null | Out-String)
-          if ([string]::IsNullOrWhiteSpace($inspectText)) {
+          # image down to the runner -- crane reads it straight from the registry.
+          # Only the VIPC-layer path (docker build FROM the base) needs the image
+          # locally, and docker build pulls it then; the no-VIPC copy path never
+          # downloads it at all.
+          $digest = (crane digest $baseImage 2>$null)
+          if (-not $digest) {
             throw "Could not read the LCWC base image '$baseImage' from the registry. Confirm the source GHCR package is public/readable or set the LCWC_BASE_IMAGE repository variable to a readable base image."
           }
-          $digest = ''
-          $m = [regex]::Match($inspectText, 'Digest:\s*(sha256:[0-9a-f]+)')
-          if ($m.Success) { $digest = $m.Groups[1].Value }
-          $repoDigest = if ($digest) { "${baseRepo}@${digest}" } else { '' }
+          $repoDigest = "${baseRepo}@${digest}"
           "image=$baseImage" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "repo_digest=$repoDigest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "digest=$digest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -490,12 +503,16 @@ jobs:
           $tags  = @("${base}:${ver}", "${base}:${ver}-${date}", "${base}:${wv}", "${base}:latest")
 
           if ($vipcCount -eq 0) {
-            Write-Host "::notice::No repository VIPC dependencies are selected. Fast path: copying the LCWC base image into this repository's GHCR worker package at the REGISTRY level (docker buildx imagetools create) -- the multi-gigabyte layers are never downloaded to or re-uploaded from the runner, so this takes seconds, not minutes."
-            $createArgs = @()
-            foreach ($tag in $tags) { $createArgs += @('--tag', $tag) }
-            docker buildx imagetools create @createArgs $lcwcBase
+            Write-Host "::notice::No repository VIPC dependencies are selected. Fast path: copying the LCWC base image into this repository's GHCR worker package at the REGISTRY level (crane copy) -- the multi-gigabyte layers are blob-mounted server-side, never downloaded to or re-uploaded from the runner, so this takes seconds, not minutes."
+            $immutable = "${base}:${wv}"
+            crane copy $lcwcBase $immutable
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            foreach ($tag in $tags) { Write-Host "Published (registry copy): $tag" }
+            foreach ($tag in @($ver, "${ver}-${date}", 'latest')) {
+              crane tag $immutable $tag
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              Write-Host "Published (registry copy): ${base}:${tag}"
+            }
+            Write-Host "Published (registry copy): $immutable"
           } else {
             Write-Host "::notice::$vipcCount repository VIPC file(s) selected. Building the repo-specific dependency layer now; this can take a long time because VIPM must apply project dependencies before CI can run on the updated worker."
             $tagFlags = ($tags | ForEach-Object { "-t", $_ })
