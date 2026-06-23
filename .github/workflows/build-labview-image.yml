@@ -41,7 +41,12 @@ env:
   IMAGE_NAME: ''
   PAGES_URL: ''
   DEFAULT_TAG: ${{ vars.LABVIEW_VERSION || '2026' }}
-  LCWC_SOURCE_REPOSITORY: elijah286/LabVIEW-CI-with-Containers
+  # The shared LCWC base image, owned by the source repo's GHCR. The source repo
+  # is detected at runtime by deriving the owning repo from THIS image name, so
+  # the installer's branding substitution can never make a client think it is the
+  # source. (A hardcoded source slug here would be rewritten to the client's slug
+  # at install time, making every client rebuild its own base -- the exact bug
+  # this avoids.)
   LCWC_BASE_IMAGE: ${{ vars.LCWC_BASE_IMAGE || 'ghcr.io/elijah286/labview-ci-with-containers-labview-base:2026' }}
 
 permissions:
@@ -381,7 +386,14 @@ jobs:
           $baseImage = '${{ env.LCWC_BASE_IMAGE }}'
           if (-not $baseImage.Contains(':')) { $baseImage = "${baseImage}:${{ env.DEFAULT_TAG }}" }
           $baseRepo = ($baseImage -replace ':[^/:]+$', '')
-          $isSourceRepo = ('${{ github.repository }}'.ToLowerInvariant() -eq '${{ env.LCWC_SOURCE_REPOSITORY }}'.ToLowerInvariant())
+          # Derive the repo that OWNS this base image: ghcr.io/<owner>/<name>-labview-base
+          # -> <owner>/<name>. That owning repo is the source; every other repo is a
+          # client that copies the published base. Deriving the source identity from
+          # the image name (instead of a hardcoded slug) makes it immune to the
+          # installer's branding substitution, which would otherwise rewrite a literal
+          # source slug to the client's own slug and make the client rebuild the base.
+          $sourceSlug = ($baseRepo -replace '^[^/]+/', '') -replace '-labview-base$', ''
+          $isSourceRepo = ('${{ github.repository }}'.ToLowerInvariant() -eq $sourceSlug.ToLowerInvariant())
 
           if ($isSourceRepo) {
             $baseHash = (Get-FileHash -LiteralPath '.github/docker/labview-ci-base.Dockerfile' -Algorithm SHA256).Hash.ToLower().Substring(0, 12)
