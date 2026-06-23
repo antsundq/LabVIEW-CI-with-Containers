@@ -2342,10 +2342,32 @@ run_dialog = (r"""
       var tin=document.getElementById('cidash-hist-tok-input'); if(tin) tin.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); var v=(tin.value||'').trim(); if(v){ setTok(v); histTokPanel(false); histRun(); } } });
       histScopeApply(); histRefresh();
     }
-    function histOpen(){
+    function histOpen(opts){
       var m=histModal(); if(!m) return;
       histRender();
+      if(opts && (opts.cap || opts.sha)) histPreselect(opts);
       m.style.display='block'; document.body.style.overflow='hidden';
+    }
+    function histPreselect(opts){
+      // Open the dialog pre-configured to re-run a single document (a report's
+      // "Re-run" button routes here via the shared header): scope to exactly that
+      // revision, set only that activity to Re-run, and - when the activity is
+      // platform-split - limit to the document's platform. Falls back silently to
+      // the normal full dialog when the revision/activity isn't on this dashboard.
+      try{
+        if(opts.sha && histIdx(opts.sha)>=0){
+          var sp=document.querySelector('input[name="cidash-hist-scope"][value="specific"]'); if(sp){ sp.checked=true; histScopeApply(); }
+          Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.checked=(b.value===opts.sha); });
+        }
+        if(opts.cap){
+          histInstalledCaps().forEach(function(cap){ actMode[cap]=(cap===opts.cap)?'rerun':'off'; });
+          if(opts.platform && histHasPlatformPicker(opts.cap)){
+            platState[opts.cap]=[opts.platform];
+            Array.prototype.forEach.call(document.querySelectorAll('.cidash-hist-plat[data-cap="'+opts.cap+'"]'), function(b){ b.checked=(b.getAttribute('data-platform')===opts.platform); });
+          }
+        }
+      }catch(e){}
+      histRefresh();
     }
     function histRun(){
       var cells=histCells();
@@ -2384,8 +2406,23 @@ run_dialog = (r"""
     // Re-apply optimistic "Queued" badges once the table exists (this script runs
     // before the table is parsed), and after every auto-refresh thereafter; wire
     // the backfill card the same way.
-    if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); qSync(); bfInit(); }); }
-    else { applyQueued(); qSync(); bfInit(); }
+    // Auto-open the "Populate history" dialog when another page routed here for it
+    // (the shared header's Populate history menu item, or a report's "Re-run"
+    // button, navigate to ?lvci-populate=1[&cap&sha&platform] when the dashboard's
+    // inline dialog isn't on their page). The trigger params are stripped so a
+    // manual reload doesn't reopen it.
+    function lvciAutoPopulate(){
+      try{
+        var p=new URLSearchParams(location.search||'');
+        if(p.get('lvci-populate')!=='1') return;
+        var opts={ cap:(p.get('cap')||''), sha:(p.get('sha')||''), platform:(p.get('platform')||'') };
+        try{ ['lvci-populate','cap','sha','platform'].forEach(function(k){ p.delete(k); });
+             var qs=p.toString(); history.replaceState(null,'',location.pathname+(qs?('?'+qs):'')+location.hash); }catch(e){}
+        histOpen((opts.cap||opts.sha)?opts:undefined);
+      }catch(e){}
+    }
+    if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', function(){ applyQueued(); qSync(); bfInit(); lvciAutoPopulate(); }); }
+    else { applyQueued(); qSync(); bfInit(); lvciAutoPopulate(); }
     // Returning to the dashboard after kicking off a run elsewhere (e.g. "Re-run
     // analysis" from a report, or a run started in another tab) should reflect it
     // right away. The page otherwise only updates on its auto-refresh timer (up to
