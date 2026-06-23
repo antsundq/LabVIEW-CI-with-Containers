@@ -2918,6 +2918,13 @@ def _known_nipm_dependencies():
       'details': 'NI UTF support package used by the Windows unit-test runner.',
     },
     {
+      'name': 'JKI Dragon',
+      'source': 'NI Package Manager',
+      'packages': {'windows': ['jki-dragon']},
+      'platforms': ['windows'],
+      'details': 'JKI Dragon dependency-management tooling installed from the LabVIEW 2026 NI Package Manager feed.',
+    },
+    {
       'name': 'VI Package Manager',
       'source': 'NI Package Manager',
       'packages': {'windows': ['ni-vipm']},
