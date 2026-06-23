@@ -1,8 +1,15 @@
 {
   "schema": 1,
   "repo": "elijah286/LabVIEW-CI-with-Containers",
-  "sha": "7d7cd3923620578e0f2a2653c339fef53d9b7aa3",
+  "sha": "be6f1618a3c724f73bead145f8ce1dc740256fc8",
   "revisions": [
+    {
+      "sha": "be6f1618a3c724f73bead145f8ce1dc740256fc8",
+      "short": "be6f161",
+      "message": "Show .dragon dependencies under the VIPM and NI Packages tabs (v3.42.1)",
+      "author": "lcwc",
+      "date": "2026-06-23T11:43:09Z"
+    },
     {
       "sha": "7d7cd3923620578e0f2a2653c339fef53d9b7aa3",
       "short": "7d7cd39",
@@ -695,13 +702,6 @@
       "message": "dashboard: surface the Activity picker inside the VI Browser (v3.26.0)",
       "author": "Elijah Kerry",
       "date": "2026-06-20T18:56:34Z"
-    },
-    {
-      "sha": "fc45f06c29e3cdda19c898ca28dec19731430dde",
-      "short": "fc45f06",
-      "message": "header: Activity picker gains a Snapshots (VI Browser) entry (v3.25.0)",
-      "author": "Elijah Kerry",
-      "date": "2026-06-20T18:42:11Z"
     },
     {
       "sha": "12553d67f22d02885acfd455c1d68381e8702aca",
