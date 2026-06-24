@@ -96,7 +96,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, re, glob, shutil, pathlib
-          dest = pathlib.Path('.github/labview/vipm'); dest.mkdir(parents=True, exist_ok=True)
+          dest = pathlib.Path('.github/labview/vipm-linux'); dest.mkdir(parents=True, exist_ok=True)
           # Install/seed (and tooling-recipe pushes) must NEVER bake project dependencies, so a
           # fresh install is a constant-time base build no matter how many .vipc / .dragon files
           # the repo ships. Project VIPC is staged (and baked) only on an explicit dependency
