@@ -93,6 +93,16 @@ jobs:
           python3 - <<'PY'
           import os, re, glob, shutil, pathlib
           dest = pathlib.Path('.github/labview/vipm-linux'); dest.mkdir(parents=True, exist_ok=True)
+          # Install/seed (and tooling-recipe pushes) must NEVER bake project dependencies, so a
+          # fresh install is a constant-time base build no matter how many .vipc / .dragon files
+          # the repo ships. Project VIPC is staged (and baked) only on an explicit dependency
+          # rebuild: a manual workflow_dispatch from the Dependencies page, or the monthly
+          # base-image rebuild (schedule). On a push (the install merge or a tooling update) the
+          # worker is seeded as a plain NI + LabVIEW base and the dashboard then flags any
+          # project dependencies for an opt-in apply.
+          if os.environ.get('GITHUB_EVENT_NAME', '') == 'push':
+            print('Install/seed (push): skipping project VIPC staging so install time stays constant regardless of how many .vipc/.dragon files the repo has; dependencies are applied later via an opt-in rebuild.')
+            raise SystemExit(0)
           paths = []
           cfg = pathlib.Path('.github/labview-ci.yml')
           if cfg.exists():
