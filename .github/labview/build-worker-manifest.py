@@ -276,7 +276,7 @@ def render_html(m: dict, pages_url: str) -> str:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Generate CI worker manifest (HTML + JSON).")
-    ap.add_argument("--platform", required=True, choices=["windows", "linux", "linux-beta"])
+    ap.add_argument("--platform", required=True, choices=["windows", "linux", "linux-beta", "windows-beta"])
     ap.add_argument("--version", required=True, help="Worker version, e.g. win-abc123def456")
     ap.add_argument("--labview-version", default="")
     ap.add_argument("--base-image", default="")
