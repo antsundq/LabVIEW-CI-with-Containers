@@ -3393,7 +3393,7 @@ def _system_dependencies():
   if not has_toimages:
     return []
   has_windows = os.path.isfile('.github/workflows/vi-snapshots-json-windows.yml')
-  has_linux = os.path.isfile('.github/workflows/vi-snapshots-json.yml') and os.path.isfile('.github/workflows/build-toimages-image.yml')
+  has_linux = os.path.isfile('.github/workflows/vi-snapshots-json.yml')
   return [
     {
       'name': 'VI Browser 2.0 toimages runner',
