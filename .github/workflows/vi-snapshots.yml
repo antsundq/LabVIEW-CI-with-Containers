@@ -14,6 +14,10 @@ on:
       - '**.lvproj'
       - '**.lvlib'
       - '**.lvclass'
+      # Exclude the pipeline's own tooling VIs (PrintToSingleFileHtml, toimages,
+      # etc., added under .github/ by an install/deploy) so onboarding the pipeline
+      # never kicks off a snapshot run -- matching the other VI-source workflows.
+      - '!.github/**'
   workflow_dispatch:
     inputs:
       mode:
