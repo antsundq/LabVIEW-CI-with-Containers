@@ -3353,7 +3353,7 @@ def _build_dragon_section():
   """Build the Dragon dependency block for the Dependencies index (Win Beta only).
 
   The declared dependencies come from parsing the repo's .dragon files at this
-  revision; the per-item install status is reconciled from the windows-experimental
+  revision; the per-item install status is reconciled from the windows-beta
   worker manifest's Dragon section (when that image has been built)."""
   inv = _dragon_inventory()
   if not (inv.get('files') or []):
@@ -3368,7 +3368,7 @@ def _build_dragon_section():
       'install_set': [],
       'conflicts': inv.get('conflicts') or [],
     }
-  exp_man = _worker_manifest('windows-experimental', 'latest')
+  exp_man = _worker_manifest('windows-beta', 'latest')
   have_manifest = isinstance(exp_man, dict)
   status_index = _dragon_status_index(exp_man)
   exp_dragon = exp_man.get('dragon') if have_manifest else None
@@ -3460,7 +3460,7 @@ def _compute_deps_pending(data):
     if lin_missing:
       containers.append('linux')
   if dragon_pending:
-    containers.append('windows-experimental')
+    containers.append('windows-beta')
 
   return {
     'schema': 1,
