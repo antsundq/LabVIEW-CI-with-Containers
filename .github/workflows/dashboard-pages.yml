@@ -17,6 +17,9 @@ on:
       - '.github/pages/documentation.html'
       - '.github/pages/clients.html'
       - '.github/pages/lvci-header.js'
+      # The dashboard stages catalog.json at the Pages root (version badge +
+      # What's New), so a catalog/version change must rebuild the dashboard too.
+      - '.github/labview-ci/catalog.json'
       - '.github/workflows/dashboard-pages.yml'
       # Rebuild when the shared dashboard action (generator or its bundled pages)
       # changes, so this repo's own dashboard always reflects the latest tooling.
