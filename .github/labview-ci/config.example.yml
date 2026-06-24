@@ -41,12 +41,23 @@ config:
     # the LabVIEW year, or "base" for the bare NI image.
     use: latest
 
-    # VIPC dependency files baked into the worker image. Adding or changing a
-    # .vipc never rebuilds the container automatically: the dashboard shows a
-    # "dependencies need to be installed" banner and you apply the update
-    # explicitly from the Dependencies page (a long, opt-in operation).
+    # VIPC dependency files baked into the worker image. By default, adding or
+    # changing a .vipc does NOT rebuild the container automatically -- the
+    # dashboard shows a "dependencies need to be installed" banner and you apply
+    # the update on demand from the Dependencies page (a long operation). Set
+    # monitor: true on a file (off by default) to opt THAT file into an automatic
+    # rebuild whenever it changes on a submission; configure this in the pipeline
+    # configuration (Configure -> Automatic dependency updates).
     vipc:
       - path: "Dependencies.vipc"
+        monitor: false
+
+    # Dragon (JKI Dragon / NIPM) dependency files, handled like VIPC: listed files
+    # are baked into the worker, and monitor: true auto-rebuilds on change. Omit
+    # this block if the project has no .dragon dependencies.
+    # dragon:
+    #   - path: "Project.dragon"
+    #     monitor: false
 
     # Per-action container overrides (optional). Each container action can run in
     # a different image than the default above: "latest", a pinned build tag, the

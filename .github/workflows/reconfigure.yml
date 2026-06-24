@@ -39,6 +39,10 @@ on:
         description: 'Baked VIPC files as path::monitor pairs separated by ; (blank = keep current)'
         required: false
         default: ''
+      container_dragon:
+        description: 'Baked Dragon (NIPM) files as path::monitor pairs separated by ; (blank = keep current)'
+        required: false
+        default: ''
       container_actions:
         description: 'Per-action container overrides as id::tag pairs separated by ; (e.g. masscompile::latest;vidiff::base; blank = keep current)'
         required: false
@@ -107,6 +111,7 @@ jobs:
           IN_ACTS: ${{ inputs.activities }}
           IN_CONTAINER_USE: ${{ inputs.container_use }}
           IN_CONTAINER_VIPC: ${{ inputs.container_vipc }}
+          IN_CONTAINER_DRAGON: ${{ inputs.container_dragon }}
           IN_CONTAINER_ACTIONS: ${{ inputs.container_actions }}
           IN_ACTION_TRIGGERS: ${{ inputs.action_triggers }}
           IN_VI_BROWSER: ${{ inputs.vi_browser }}
@@ -127,6 +132,7 @@ jobs:
           acts_in = os.environ['IN_ACTS'].strip()
           container_use_in = os.environ.get('IN_CONTAINER_USE', '').strip()
           container_vipc_in = os.environ.get('IN_CONTAINER_VIPC', '').strip()
+          container_dragon_in = os.environ.get('IN_CONTAINER_DRAGON', '').strip()
           container_actions_in = os.environ.get('IN_CONTAINER_ACTIONS', '').strip()
           action_triggers_in = os.environ.get('IN_ACTION_TRIGGERS', '').strip()
           vi_browser_in = os.environ.get('IN_VI_BROWSER', '').strip()
@@ -140,7 +146,7 @@ jobs:
           # Preserve provenance fields from any existing manifest.
           mpath = pathlib.Path('.github/labview-ci.yml')
           prev = {'activities': [], 'installedVersion': '', 'repo': '', 'ref': 'main',
-                  'container_use': '', 'vipc': [], 'actions': {}, 'triggers': {}, 'viBrowser': {}, 'actionOs': {}, 'dependencyPolicy': {}, 'unitTests_block': [],
+                  'container_use': '', 'vipc': [], 'dragon': [], 'actions': {}, 'triggers': {}, 'viBrowser': {}, 'actionOs': {}, 'dependencyPolicy': {}, 'unitTests_block': [],
                   'labviewVersion': '', 'os': [], 'maxParallel': None}
           if mpath.exists():
               in_acts = False; in_container = False; in_vipc = False; in_actions = False; in_triggers = False; in_vibrowser = False; in_action_os = False; in_dep_policy = False; in_ut = False; cur_vipc = None
@@ -211,6 +217,31 @@ jobs:
                   m = re.match(r'^\s{4}maxParallel:\s*(\d+)', line)
                   if m: prev['maxParallel'] = int(m.group(1))
 
+          # Baked Dragon files (config.container.dragon): scanned separately from the
+          # main state machine above to keep that loop untouched. container: -> dragon:
+          def _scan_prev_dragon(text):
+              out = []; in_c = False; in_d = False; cur = None
+              for line in text.splitlines():
+                  if re.match(r'^\s*container:\s*$', line):
+                      in_c = True; in_d = False; cur = None; continue
+                  if not in_c:
+                      continue
+                  if re.match(r'^\s{0,3}\S', line):     # left the container block
+                      in_c = False; in_d = False; cur = None; continue
+                  if re.match(r'^\s{4}dragon:\s*$', line):
+                      in_d = True; cur = None; continue
+                  if re.match(r'^\s{4}\S', line):       # another 4-space key ends the list
+                      in_d = False; cur = None; continue
+                  if in_d:
+                      m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
+                      if m:
+                          cur = {'path': m.group(1).strip(), 'monitor': False}; out.append(cur); continue
+                      m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
+                      if m and cur is not None:
+                          cur['monitor'] = (m.group(1).strip().lower() == 'true')
+              return out
+          prev['dragon'] = _scan_prev_dragon(mpath.read_text(encoding='utf-8')) if mpath.exists() else []
+
           # version / os / runners: explicit input wins; blank or "keep" preserves
           # whatever the manifest had (so a focused editor can change one thing).
           ver = ver_in or prev.get('labviewVersion') or '2026'
@@ -235,6 +266,7 @@ jobs:
                       out.append({'path': entry, 'monitor': False})
               return out
           vipc = _parse_vipc(container_vipc_in) if container_vipc_in else prev['vipc']
+          dragon = _parse_vipc(container_dragon_in) if container_dragon_in else prev['dragon']
 
           # Per-action container overrides: explicit input wins; blank keeps the
           # manifest's. Each entry is "<activity-id>::<tag>" (tag = latest, a pinned
@@ -365,6 +397,12 @@ jobs:
           if vipc:
               lines.append('    vipc:')
               for v in vipc:
+                  p = str(v['path']).replace('"', '')
+                  lines.append(f'      - path: "{p}"')
+                  lines.append(f"        monitor: {'true' if v['monitor'] else 'false'}")
+          if dragon:
+              lines.append('    dragon:')
+              for v in dragon:
                   p = str(v['path']).replace('"', '')
                   lines.append(f'      - path: "{p}"')
                   lines.append(f"        monitor: {'true' if v['monitor'] else 'false'}")

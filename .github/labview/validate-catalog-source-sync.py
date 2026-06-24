@@ -13,6 +13,7 @@ CATALOG = ROOT / ".github" / "labview-ci" / "catalog.json"
 
 REQUIRED_CUSTOM_IMAGE_WINDOWS = [
     ".github/workflows/build-labview-image.yml",
+    ".github/workflows/copy-labview-image.yml",
     ".github/docker/labview-ci-base.Dockerfile",
     ".github/docker/labview-ci.Dockerfile",
     ".github/labview/vipm/",

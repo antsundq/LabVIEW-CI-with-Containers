@@ -133,7 +133,7 @@
           <li>List VIPC dependency files baked into the container</li>
           <li>Choose a different container per action (for example, point one action at a newly-built dependency container)</li>
         </ul>
-        <p>VI Analyzer, Mass Compile, and VIDiff run inside the container you select. Adding or changing a VIPC never rebuilds the container automatically &mdash; the dashboard shows a "dependencies need to be installed" banner and you apply the update explicitly from the Dependencies page.</p>
+        <p>VI Analyzer, Mass Compile, and VIDiff run inside the container you select. By default, adding or changing a VIPC or .dragon file never rebuilds the container automatically &mdash; the dashboard shows a "dependencies need to be installed" banner and you apply the update on demand from the Dependencies page. You can opt in per file: tick <strong>Monitor</strong> in the pipeline configuration (Configure) so the worker rebuilds automatically whenever that file changes.</p>
       </div>
     </div>
 
