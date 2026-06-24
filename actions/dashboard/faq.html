@@ -130,10 +130,10 @@
         <p>From Configure, you can:</p>
         <ul>
           <li>Select which prebuilt container image to use (Latest for always-current, or pin a specific build)</li>
-          <li>List VIPC dependency files baked into the container</li>
+          <li>Set the global dependency policy for requiring or automatically installing monitored dependencies</li>
           <li>Choose a different container per action (for example, point one action at a newly-built dependency container)</li>
         </ul>
-        <p>VI Analyzer, Mass Compile, and VIDiff run inside the container you select. By default, adding or changing a VIPC or .dragon file never rebuilds the container automatically &mdash; the dashboard shows a "dependencies need to be installed" banner and you apply the update on demand from the Dependencies page. You can opt in per file: tick <strong>Monitor</strong> in the pipeline configuration (Configure) so the worker rebuilds automatically whenever that file changes.</p>
+        <p>VI Analyzer, Mass Compile, and VIDiff run inside the container you select. Dependency files are monitored from the Dependencies page, where each VIPC and .dragon row has its own <strong>Monitored</strong> checkbox. Monitored files produce dependency warnings, and files saved with <code>monitor: true</code> can trigger an automatic worker rebuild when they change; unmonitored files do neither.</p>
       </div>
     </div>
 
@@ -187,9 +187,9 @@
         <span class="faq-icon">▼</span>
       </div>
       <div class="faq-a">
-        <p>Rebuilding the worker image is a <strong>heavy step — usually 15+ minutes</strong> — because it installs LabVIEW, your VI Package dependencies, and any baked tooling from scratch. It is intentionally <em>not</em> run on every commit, and never as a side effect of a commit. A rebuild happens only when you explicitly ask for one:</p>
+        <p>Rebuilding the worker image is a <strong>heavy step — usually 15+ minutes</strong> — because it installs LabVIEW, your VI Package dependencies, and any baked tooling from scratch. It is intentionally <em>not</em> run on every ordinary code commit. A rebuild happens only in these cases:</p>
         <ul>
-          <li><strong>Your dependencies change</strong> — you add or edit a project <code>.vipc</code> (VI Package Configuration), then apply the update from the Dependencies page ("Review &amp; update dependencies"). The dashboard shows a banner until you do.</li>
+          <li><strong>Your monitored dependencies change</strong> — you add or edit a monitored project <code>.vipc</code> / <code>.dragon</code> file, or apply the update from the Dependencies page ("Review &amp; update dependencies"). The dashboard shows a banner for monitored missing dependencies until you do.</li>
           <li><strong>The build inputs change</strong> — the worker Dockerfile or the VIPM assets under <code>.github/labview/vipm/</code>.</li>
           <li><strong>A reconfigure that affects the image</strong> — for example changing the LabVIEW version or toggling baked tooling such as Antidoc.</li>
           <li><strong>On a schedule or on demand</strong> — a monthly rebuild for base-image security updates, or when you click <strong>Build / Rebuild now</strong>.</li>

@@ -92,11 +92,11 @@ jobs:
 
       - name: Stage repo VIPC files
         id: vipc
+        shell: bash
         run: |
           python3 - <<'PY'
-          import glob, os, pathlib, re, shutil
-          dest = pathlib.Path('.github/labview/vipm-linux')
-          dest.mkdir(parents=True, exist_ok=True)
+          import os, re, glob, shutil, pathlib
+          dest = pathlib.Path('.github/labview/vipm'); dest.mkdir(parents=True, exist_ok=True)
           # Install/seed (and tooling-recipe pushes) must NEVER bake project dependencies, so a
           # fresh install is a constant-time base build no matter how many .vipc / .dragon files
           # the repo ships. Project VIPC is staged (and baked) only on an explicit dependency
@@ -109,24 +109,43 @@ jobs:
               with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
                   out.write('count=0\n')
               raise SystemExit(0)
-          paths = []
           cfg = pathlib.Path('.github/labview-ci.yml')
-          if cfg.exists():
-              in_container = in_vipc = False
+
+          def configured_vipcs():
+              selected = []
+              saw_list = False
+              cur = None
+              if not cfg.exists():
+                  return selected, saw_list
+              in_container = False
+              in_vipc = False
               for line in cfg.read_text(encoding='utf-8').splitlines():
                   if re.match(r'^\s*container:\s*$', line):
-                      in_container = True; in_vipc = False; continue
-                  if in_container and re.match(r'^\s{4}vipc:\s*$', line):
-                      in_vipc = True; continue
+                      in_container = True; in_vipc = False; cur = None; continue
+                  if not in_container:
+                      continue
+                  if re.match(r'^\S', line):
+                      in_container = False; in_vipc = False; cur = None; continue
+                  if re.match(r'^\s{4}vipc:\s*$', line):
+                      in_vipc = True; saw_list = True; cur = None; continue
+                  if re.match(r'^\s{4}\w+:\s*$', line):
+                      in_vipc = False; cur = None; continue
+                  if re.match(r'^\s{4}\w+:\s*\S', line):
+                      in_vipc = False; cur = None; continue
                   if in_vipc:
                       match = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
                       if match:
-                          paths.append(match.group(1).strip()); continue
-                      if re.match(r'^\s{0,4}\S', line):
-                          in_vipc = False; in_container = False
-                  elif in_container and re.match(r'^\S', line):
-                      in_container = False
-          if not paths:
+                          cur = match.group(1).strip().replace('\\', '/')
+                          continue
+                      match = re.match(r'^\s{8}monitor:\s*(\S+)', line)
+                      if match and cur is not None:
+                          if match.group(1).strip().lower() == 'true':
+                              selected.append(cur)
+                          cur = None
+              return selected, saw_list
+
+          paths, saw_vipc_list = configured_vipcs()
+          if not paths and not saw_vipc_list:
               paths = sorted(
                   p for p in glob.glob('**/*.vipc', recursive=True)
                   if not p.replace(os.sep, '/').startswith('.github/')
@@ -144,7 +163,6 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
               out.write(f'count={staged}\n')
           PY
-
       - name: Compute worker version
         id: ver
         env:

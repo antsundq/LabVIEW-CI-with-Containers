@@ -36,11 +36,11 @@ on:
         required: false
         default: ''
       container_vipc:
-        description: 'Baked VIPC files as path::monitor pairs separated by ; (blank = keep current)'
+        description: 'Monitored VIPC files as path::monitor pairs separated by ; (blank = keep current)'
         required: false
         default: ''
       container_dragon:
-        description: 'Baked Dragon (NIPM) files as path::monitor pairs separated by ; (blank = keep current)'
+        description: 'Monitored Dragon (NIPM) files as path::monitor pairs separated by ; (blank = keep current)'
         required: false
         default: ''
       container_actions:
@@ -60,12 +60,12 @@ on:
         required: false
         default: ''
       require_dependencies:
-        description: 'Require all dependencies to be installed before running actions (keep = leave unchanged)'
+        description: 'Require all monitored dependencies to be installed before running actions (keep = leave unchanged)'
         type: choice
         options: [keep, 'true', 'false']
         default: keep
       auto_install_dependencies:
-        description: 'Automatically install missing dependencies and rebuild containers before running actions (keep = leave unchanged)'
+        description: 'Automatically install missing monitored dependencies and rebuild containers before running actions (keep = leave unchanged)'
         type: choice
         options: [keep, 'true', 'false']
         default: keep
@@ -217,7 +217,7 @@ jobs:
                   m = re.match(r'^\s{4}maxParallel:\s*(\d+)', line)
                   if m: prev['maxParallel'] = int(m.group(1))
 
-          # Baked Dragon files (config.container.dragon): scanned separately from the
+          # Monitored Dragon files (config.container.dragon): scanned separately from the
           # main state machine above to keep that loop untouched. container: -> dragon:
           def _scan_prev_dragon(text):
               out = []; in_c = False; in_d = False; cur = None

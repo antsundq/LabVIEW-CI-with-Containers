@@ -7,13 +7,12 @@ on:
   # dependency updates are opt-in (the dashboard's "Review & update dependencies"
   # dialog, which dispatches this workflow, or a manual workflow_dispatch).
   #
-  # A project CAN opt INDIVIDUAL dependency files into automatic rebuilds via the
-  # Configure page's per-file "Monitor" toggle (config.container.vipc[].monitor /
-  # config.container.dragon[].monitor, both default false). When at least one file
-  # is monitored, a push that changes a MONITORED *.vipc / *.dragon auto-rebuilds
+  # A project can choose individual monitored dependency files on the Dependencies
+  # page (config.container.vipc[].monitor / config.container.dragon[].monitor).
+  # When at least one file is monitored, a push that changes a MONITORED *.vipc / *.dragon auto-rebuilds
   # the worker; the gate job below enforces this and skips the build for any change
-  # that is not a monitored dependency. Monitoring is OFF by default, so out of the
-  # box nothing here runs automatically except the monthly base-image rebuild.
+  # that is not a monitored dependency. Nothing here runs automatically except the
+  # monthly base-image rebuild until a monitored file is saved in config.
   push:
     branches: [main]
     paths:
@@ -76,7 +75,7 @@ concurrency:
 
 jobs:
   # Decide whether this push should actually rebuild the worker image. Auto-rebuild
-  # is OPT-IN and OFF by default: a push only rebuilds when it changes a *.vipc or
+  # is per monitored file: a push only rebuilds when it changes a *.vipc or
   # *.dragon that the project flagged monitor:true in .github/labview-ci.yml
   # (config.container.vipc[] / config.container.dragon[]). Manual dispatch and the
   # monthly cron always rebuild (a rebuild is the whole point of running them). Any
@@ -153,14 +152,15 @@ jobs:
                       if in_list:
                           m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
                           if m:
-                              cur = os.path.basename(m.group(1).strip())
+                              cur = m.group(1).strip().replace('\\', '/')
                               monitor.setdefault(cur, False); continue
                           m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
                           if m and cur is not None:
                               monitor[cur] = (m.group(1).strip().lower() == 'true')
 
               for f in dep_changed:
-                  if monitor.get(os.path.basename(f), False):
+                  key = f.replace(os.sep, '/')
+                  if monitor.get(key, False):
                       emit(True, 'monitored dependency changed: ' + f)
               emit(False, 'changed dependencies are not monitored -> skip')
           except SystemExit:
@@ -347,24 +347,45 @@ jobs:
           python - <<'PY'
           import os, re, glob, shutil, pathlib
           dest = pathlib.Path('.github/labview/vipm'); dest.mkdir(parents=True, exist_ok=True)
-          paths = []
           cfg = pathlib.Path('.github/labview-ci.yml')
-          if cfg.exists():
-              in_c = in_v = False
+
+          def configured_paths(kind):
+              selected = []
+              saw_list = False
+              cur = None
+              if not cfg.exists():
+                  return selected, saw_list
+              in_c = False
+              in_list = None
               for line in cfg.read_text(encoding='utf-8').splitlines():
                   if re.match(r'^\s*container:\s*$', line):
-                      in_c = True; in_v = False; continue
-                  if in_c and re.match(r'^\s{4}vipc:\s*$', line):
-                      in_v = True; continue
-                  if in_v:
+                      in_c = True; in_list = None; cur = None; continue
+                  if not in_c:
+                      continue
+                  if re.match(r'^\S', line):
+                      in_c = False; in_list = None; cur = None; continue
+                  mk = re.match(r'^\s{4}(\w+):\s*$', line)
+                  if mk:
+                      in_list = kind if mk.group(1) == kind else None
+                      if in_list:
+                          saw_list = True
+                      cur = None; continue
+                  if re.match(r'^\s{4}\w+:\s*\S', line):
+                      in_list = None; cur = None; continue
+                  if in_list:
                       m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
                       if m:
-                          paths.append(m.group(1).strip()); continue
-                      if re.match(r'^\s{0,4}\S', line):
-                          in_v = False; in_c = False
-                  elif in_c and re.match(r'^\S', line):
-                      in_c = False
-          if not paths:
+                          cur = m.group(1).strip().replace('\\', '/')
+                          continue
+                      m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
+                      if m and cur is not None:
+                          if m.group(1).strip().lower() == 'true':
+                              selected.append(cur)
+                          cur = None
+              return selected, saw_list
+
+          paths, saw_vipc_list = configured_paths('vipc')
+          if not paths and not saw_vipc_list:
               paths = sorted(
                   p for p in glob.glob('**/*.vipc', recursive=True)
                   if not p.replace(os.sep, '/').startswith('.github/')
@@ -396,27 +417,15 @@ jobs:
               print('No VIPC files to stage.')
 
           # Project .dragon (JKI Dragon / NIPM) declarations are handled like .vipc
-          # for the worker bake, but ONLY when explicitly listed in
-          # config.container.dragon[] -- there is no auto-discovery, so a repo that
-          # merely happens to contain a *.dragon file never changes its build until
-          # the project opts that file in from the Configure page. Staged files ride
-          # along in C:/vipm/ and are applied by the Dockerfile's dragon hook.
-          dpaths = []
-          if cfg.exists():
-              in_c = in_d = False
-              for line in cfg.read_text(encoding='utf-8').splitlines():
-                  if re.match(r'^\s*container:\s*$', line):
-                      in_c = True; in_d = False; continue
-                  if in_c and re.match(r'^\s{4}dragon:\s*$', line):
-                      in_d = True; continue
-                  if in_d:
-                      m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
-                      if m:
-                          dpaths.append(m.group(1).strip()); continue
-                      if re.match(r'^\s{0,4}\S', line):
-                          in_d = False; in_c = False
-                  elif in_c and re.match(r'^\S', line):
-                      in_c = False
+          # for the worker bake, but only when monitored on the Dependencies page.
+          # If no monitor list exists yet, manual dependency builds discover all
+          # project .dragon files so a fresh repo can apply the default selections.
+          dpaths, saw_dragon_list = configured_paths('dragon')
+          if not dpaths and not saw_dragon_list:
+              dpaths = sorted(
+                  p for p in glob.glob('**/*.dragon', recursive=True)
+                  if not p.replace(os.sep, '/').startswith('.github/')
+              )
           dstaged = 0
           for p in dpaths:
               if os.path.isfile(p):
@@ -430,7 +439,6 @@ jobs:
               out.write(f'count={staged}\n')
               out.write(f'dragon_count={dstaged}\n')
           PY
-
       - name: Ensure Docker daemon is running
         shell: powershell
         run: ./.github/labview/ensure-docker.ps1

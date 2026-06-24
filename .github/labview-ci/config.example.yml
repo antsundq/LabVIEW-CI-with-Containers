@@ -41,20 +41,18 @@ config:
     # the LabVIEW year, or "base" for the bare NI image.
     use: latest
 
-    # VIPC dependency files baked into the worker image. By default, adding or
-    # changing a .vipc does NOT rebuild the container automatically -- the
-    # dashboard shows a "dependencies need to be installed" banner and you apply
-    # the update on demand from the Dependencies page (a long operation). Set
-    # monitor: true on a file (off by default) to opt THAT file into an automatic
-    # rebuild whenever it changes on a submission; configure this in the pipeline
-    # configuration (Configure -> Automatic dependency updates).
+    # VIPC dependency files monitored by the Dependencies page. Monitored files
+    # produce dependency warnings when packages are missing; monitor: true also
+    # opts that file into automatic worker rebuilds when it changes. monitor: false
+    # keeps the file visible in config without warnings or automatic rebuilds.
     vipc:
       - path: "Dependencies.vipc"
         monitor: false
 
-    # Dragon (JKI Dragon / NIPM) dependency files, handled like VIPC: listed files
-    # are baked into the worker, and monitor: true auto-rebuilds on change. Omit
-    # this block if the project has no .dragon dependencies.
+    # Dragon (JKI Dragon / NIPM) dependency files monitored by the
+    # Dependencies page. monitor: true participates in warnings, dependency
+    # builds, and automatic rebuilds on change; monitor: false keeps the file
+    # visible without warnings or automatic rebuilds.
     # dragon:
     #   - path: "Project.dragon"
     #     monitor: false

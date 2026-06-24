@@ -52,8 +52,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Decide whether this push should rebuild the worker. Auto-rebuild is OPT-IN and
-  # OFF by default -- identical to the Windows worker: a push rebuilds only when it
+  # Decide whether this push should rebuild the worker. Auto-rebuild is per monitored
+  # file -- identical to the Windows worker: a push rebuilds only when it
   # changes a *.vipc the project flagged monitor:true in config.container.vipc[].
   # Manual dispatch and the monthly cron always rebuild. Any non-monitored change,
   # and any uncertainty/error, leaves the heavy build for an explicit dispatch (the
@@ -124,14 +124,15 @@ jobs:
                       if in_list:
                           m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
                           if m:
-                              cur = os.path.basename(m.group(1).strip())
+                              cur = m.group(1).strip().replace('\\', '/')
                               monitor.setdefault(cur, False); continue
                           m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
                           if m and cur is not None:
                               monitor[cur] = (m.group(1).strip().lower() == 'true')
 
               for f in dep_changed:
-                  if monitor.get(os.path.basename(f), False):
+                  key = f.replace(os.sep, '/')
+                  if monitor.get(key, False):
                       emit(True, 'monitored .vipc changed: ' + f)
               emit(False, 'changed .vipc are not monitored -> skip')
           except SystemExit:
@@ -198,33 +199,48 @@ jobs:
 
       - name: Stage repo VIPC files
         id: vipc
+        shell: bash
         run: |
           python3 - <<'PY'
           import os, re, glob, shutil, pathlib
-          dest = pathlib.Path('.github/labview/vipm-linux'); dest.mkdir(parents=True, exist_ok=True)
-          # This workflow runs only to BAKE: a manual dispatch, the monthly base-image
-          # rebuild, or a push that changed a MONITORED *.vipc -- identical to the Windows
-          # worker. The install SEED is the separate copy-labview-linux-image.yml. So
-          # always stage the project VIPC; the build step still falls back to a crane copy
-          # of the LCWC base when there are none to bake.
-          paths = []
+          dest = pathlib.Path('.github/labview/vipm'); dest.mkdir(parents=True, exist_ok=True)
           cfg = pathlib.Path('.github/labview-ci.yml')
-          if cfg.exists():
-            in_c = in_v = False
+
+          def configured_vipcs():
+            selected = []
+            saw_list = False
+            cur = None
+            if not cfg.exists():
+              return selected, saw_list
+            in_c = False
+            in_v = False
             for line in cfg.read_text(encoding='utf-8').splitlines():
               if re.match(r'^\s*container:\s*$', line):
-                in_c = True; in_v = False; continue
-              if in_c and re.match(r'^\s{4}vipc:\s*$', line):
-                in_v = True; continue
+                in_c = True; in_v = False; cur = None; continue
+              if not in_c:
+                continue
+              if re.match(r'^\S', line):
+                in_c = False; in_v = False; cur = None; continue
+              if re.match(r'^\s{4}vipc:\s*$', line):
+                in_v = True; saw_list = True; cur = None; continue
+              if re.match(r'^\s{4}\w+:\s*$', line):
+                in_v = False; cur = None; continue
+              if re.match(r'^\s{4}\w+:\s*\S', line):
+                in_v = False; cur = None; continue
               if in_v:
                 m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
                 if m:
-                  paths.append(m.group(1).strip()); continue
-                if re.match(r'^\s{0,4}\S', line):
-                  in_v = False; in_c = False
-              elif in_c and re.match(r'^\S', line):
-                in_c = False
-          if not paths:
+                  cur = m.group(1).strip().replace('\\', '/')
+                  continue
+                m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
+                if m and cur is not None:
+                  if m.group(1).strip().lower() == 'true':
+                    selected.append(cur)
+                  cur = None
+            return selected, saw_list
+
+          paths, saw_vipc_list = configured_vipcs()
+          if not paths and not saw_vipc_list:
             paths = sorted(
               p for p in glob.glob('**/*.vipc', recursive=True)
               if not p.replace(os.sep, '/').startswith('.github/')
@@ -241,7 +257,6 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
             out.write(f'count={staged}\n')
           PY
-
       - name: Compute worker version
         id: ver
         env:

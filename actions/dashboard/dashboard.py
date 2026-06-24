@@ -2040,11 +2040,12 @@ run_dialog = (r"""
     }
     function bfShow(){
       var c=bfCard(); if(!c) return;
-      // Hide on a repo we've dismissed, or once anything has been queued from here
-      // ("disappear after anything is run"); otherwise show with a live count.
-      var queued = Object.keys(qLoad()).length > 0;
-      if(bfDismissed() || queued){ c.style.display='none'; return; }
       var cells=bfCells(); if(!cells.length){ c.style.display='none'; return; }
+      // Hide on a repo we've dismissed, or once this dashboard has queued one of
+      // its own cells ("disappear after anything is run"); otherwise show with a live count.
+      var queued = qLoad();
+      var queuedHere = cells.some(function(x){ return !!queued[x.cap+'|'+x.sha]; });
+      if(bfDismissed() || queuedHere){ c.style.display='none'; return; }
       var shas={}; cells.forEach(function(x){ shas[x.sha]=1; });
       var n=document.getElementById('lvci-bf-count'); if(n) n.textContent=String(Object.keys(shas).length);
       c.style.display='';
@@ -3104,7 +3105,7 @@ def _parse_vipc_packages(vipc_path):
   return sorted(set(names)), ''
 
 def _parse_container_config(path='.github/labview-ci.yml'):
-  cfg = {'use': '', 'actions': {}, 'vipc': []}
+  cfg = {'use': '', 'actions': {}, 'vipc': [], 'dragon': [], 'hasVipcList': False, 'hasDragonList': False}
   if not os.path.isfile(path):
     return cfg
   section = ''
@@ -3122,14 +3123,26 @@ def _parse_container_config(path='.github/labview-ci.yml'):
           if m:
             cfg['use'] = m.group(1).strip()
           if re.match(r'^\s{4}vipc:\s*$', line):
-            section = 'vipc'; continue
+            section = 'vipc'; current = None; cfg['hasVipcList'] = True; continue
+          if re.match(r'^\s{4}dragon:\s*$', line):
+            section = 'dragon'; current = None; cfg['hasDragonList'] = True; continue
           if re.match(r'^\s{4}actions:\s*$', line):
-            section = 'actions'; continue
-        elif section == 'vipc':
+            section = 'actions'; current = None; continue
+        elif section in ('vipc', 'dragon'):
+          if re.match(r'^\s{4}vipc:\s*$', line):
+            section = 'vipc'; current = None; cfg['hasVipcList'] = True; continue
+          if re.match(r'^\s{4}dragon:\s*$', line):
+            section = 'dragon'; current = None; cfg['hasDragonList'] = True; continue
+          if re.match(r'^\s{4}actions:\s*$', line):
+            section = 'actions'; current = None; continue
           m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
           if m:
-            current = {'path': m.group(1).strip()}
-            cfg['vipc'].append(current)
+            current = {'path': m.group(1).strip(), 'monitor': True}
+            cfg[section].append(current)
+            continue
+          m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
+          if m and current is not None:
+            current['monitor'] = (m.group(1).strip().lower() == 'true')
             continue
           if re.match(r'^\s{0,4}\S', line):
             section = 'container'; current = None
@@ -3150,6 +3163,19 @@ def _repo_vipcs():
     dirs[:] = [d for d in dirs if d not in skip]
     for name in files:
       if name.lower().endswith('.vipc'):
+        path = os.path.join(root, name).replace('\\', '/')
+        if path.startswith('./'):
+          path = path[2:]
+        out.append(path)
+  return sorted(out, key=str.lower)
+
+def _repo_dragons():
+  skip = {'.git', 'ci-out', 'build', '_lvci', '__pycache__'}
+  out = []
+  for root, dirs, files in os.walk('.'):
+    dirs[:] = [d for d in dirs if d not in skip]
+    for name in files:
+      if name.lower().endswith('.dragon'):
         path = os.path.join(root, name).replace('\\', '/')
         if path.startswith('./'):
           path = path[2:]
@@ -3194,21 +3220,22 @@ def _capability_enabled(cap):
   wf = _CAPABILITY_WORKFLOW.get(cap)
   return bool(wf and os.path.isfile(wf))
 
-def _vipc_role(path, config_vipc_paths, has_config_list):
-  """Classify a discovered VIPC and whether it is applied to the worker image.
+def _vipc_role(path, config_vipc, has_config_list):
+  """Classify a discovered VIPC and its monitoring state.
 
-  - core:       ci-tooling.vipc, always baked.
-  - capability: .github/labview/<cap>/<cap>.vipc, baked only when <cap> is installed.
-  - project:    anything else; baked when listed in config.container.vipc (or, when
-                no list is configured, every project VIPC is baked by default).
+  - core:       ci-tooling.vipc, always monitored and locked.
+  - capability: .github/labview/<cap>/<cap>.vipc, monitored by its capability.
+  - project:    monitored when config.container.vipc has monitor:true; when no
+                list exists yet, every project VIPC defaults to monitored.
   """
   if path == TOOLING_CORE_VIPC:
-    return 'core', '', True
+    return 'core', '', True, True, True
   cap = _capability_for_vipc(path)
   if cap:
-    return 'capability', cap, _capability_enabled(cap)
-  configured = (path in config_vipc_paths) if has_config_list else True
-  return 'project', '', configured
+    return 'capability', cap, _capability_enabled(cap), True, False
+  entry = (config_vipc or {}).get(path)
+  monitored = bool(entry and entry.get('monitor') is True) if has_config_list else True
+  return 'project', '', monitored, monitored, False
 
 def _manifest_failed_packages(man):
   """Package names a worker manifest reports as failing to install (optional).
@@ -3349,14 +3376,30 @@ def _annotate_dragon_status(dep, status_index, have_manifest):
     dep.setdefault('installed_version', '')
     dep.setdefault('message', '')
 
-def _build_dragon_section():
+def _build_dragon_section(config=None):
   """Build the Dragon dependency block for the Dependencies index (Win Beta only).
 
-  The declared dependencies come from parsing the repo's .dragon files at this
-  revision; the per-item install status is reconciled from the windows-beta
-  worker manifest's Dragon section (when that image has been built)."""
+  Declared dependencies come from repository .dragon files. Each file carries its
+  monitor flag so the Dependencies page can suppress warnings and auto-update
+  triggers for unmonitored files while still showing the file in the table.
+  """
+  config = config or {}
+  configured = {v.get('path', ''): v for v in (config.get('dragon') or []) if v.get('path')}
+  has_config_list = bool(config.get('hasDragonList'))
   inv = _dragon_inventory()
-  if not (inv.get('files') or []):
+  files_by_path = {}
+  for f in inv.get('files') or []:
+    if f.get('source_file'):
+      files_by_path[f.get('source_file')] = f
+  for path in _repo_dragons():
+    files_by_path.setdefault(path, {'source_file': path, 'dependencies': []})
+  for path in configured:
+    files_by_path.setdefault(path, {'source_file': path, 'dependencies': []})
+  files = [files_by_path[k] for k in sorted(files_by_path, key=str.lower)]
+  for f in files:
+    entry = configured.get(f.get('source_file') or '')
+    f['monitored'] = bool(entry and entry.get('monitor') is True) if has_config_list else True
+  if not files:
     # No .dragon files in this revision: skip the experimental manifest fetch.
     return {
       'available': inv.get('available', False),
@@ -3374,16 +3417,16 @@ def _build_dragon_section():
   exp_dragon = exp_man.get('dragon') if have_manifest else None
   for item in inv.get('install_set') or []:
     _annotate_dragon_status(item, status_index, have_manifest)
-  for f in inv.get('files') or []:
+  for f in files:
     for dep in f.get('dependencies') or []:
       _annotate_dragon_status(dep, status_index, have_manifest)
   return {
-    'available': inv.get('available', False),
+    'available': inv.get('available', False) or bool(files),
     'column': 'winExp',
     'ready': have_manifest,
     'health': (exp_dragon or {}).get('health', '') if isinstance(exp_dragon, dict) else '',
     'manifest_version': exp_man.get('version', '') if have_manifest else '',
-    'files': inv.get('files') or [],
+    'files': files,
     'install_set': inv.get('install_set') or [],
     'conflicts': inv.get('conflicts') or [],
   }
@@ -3448,8 +3491,18 @@ def _compute_deps_pending(data):
       lin_missing = True
 
   dragon = data.get('dragon') or {}
+  monitored_dragon_keys = set()
+  for f in dragon.get('files') or []:
+    if f.get('monitored') is False:
+      continue
+    for dep in f.get('dependencies') or []:
+      if dep.get('package_id'):
+        monitored_dragon_keys.add((str(dep.get('manager') or 'vipm'), str(dep.get('package_id')).lower()))
   dragon_pending = []
   for item in dragon.get('install_set') or []:
+    key = (str(item.get('manager') or 'vipm'), str(item.get('package_id') or '').lower())
+    if key not in monitored_dragon_keys:
+      continue
     st = str(item.get('status') or '')
     if st in ('pending', 'not_attempted', 'missing', 'wrong_version', 'conflict'):
       dragon_pending.append({'name': item.get('name') or item.get('package_id') or '', 'status': st})
@@ -3476,14 +3529,16 @@ def _compute_deps_pending(data):
 
 def _build_dependencies_index():
   config = _parse_container_config()
-  config_vipc_paths = {v.get('path', '') for v in config.get('vipc') or []}
-  has_config_list = bool(config_vipc_paths)
+  config_vipc = {v.get('path', ''): v for v in config.get('vipc') or [] if v.get('path')}
+  has_config_list = bool(config.get('hasVipcList'))
   vipcs = []
-  for path in _repo_vipcs():
-    packages, error = _parse_vipc_packages(path)
-    role, capability, configured = _vipc_role(path, config_vipc_paths, has_config_list)
+  vipc_paths = sorted(set(_repo_vipcs()) | set(config_vipc), key=str.lower)
+  for path in vipc_paths:
+    packages, error = _parse_vipc_packages(path) if os.path.isfile(path) else ([], '')
+    role, capability, configured, monitored, locked = _vipc_role(path, config_vipc, has_config_list)
     vipcs.append({'path': path, 'role': role, 'capability': capability,
-                  'configured': configured, 'packages': packages, 'error': error})
+                  'tooling': role == 'core', 'configured': configured, 'monitored': monitored,
+                  'locked': locked, 'packages': packages, 'error': error})
   columns = [
     {'key': 'windows', 'label': 'Windows', 'platform': 'windows', 'defaultTag': 'latest'},
     {'key': 'linux', 'label': 'Linux', 'platform': 'linux', 'defaultTag': 'latest'},
@@ -3527,7 +3582,7 @@ def _build_dependencies_index():
     'config': config,
     'vipc': vipcs,
     'nipm': _known_nipm_dependencies(),
-    'dragon': _build_dragon_section(),
+    'dragon': _build_dragon_section(config),
     'system': _system_dependencies(),
     'columns': columns,
   }
