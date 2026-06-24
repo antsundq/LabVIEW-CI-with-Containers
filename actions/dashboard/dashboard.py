@@ -3196,10 +3196,30 @@ def _worker_manifest(platform, tag):
 def _manifest_packages(man):
   packages = set()
   if isinstance(man, dict):
+    for pkg in man.get('vipm_packages') or []:
+      if isinstance(pkg, dict):
+        name = str(pkg.get('name') or '').strip()
+        version = str(pkg.get('version') or '').strip()
+        label = str(pkg.get('label') or '').strip()
+        for value in (name, label, f'{name}-{version}' if name and version else ''):
+          if value:
+            packages.add(value)
+      elif isinstance(pkg, str) and pkg.strip():
+        packages.add(pkg.strip())
+    if packages:
+      return sorted(packages, key=str.lower)
     for vipc in man.get('vipc') or []:
       for pkg in vipc.get('packages') or []:
         packages.add(pkg)
+    if not packages and man.get('platform') == 'windows' and man.get('copied_from_base'):
+      packages.update(_core_tooling_packages())
   return sorted(packages, key=str.lower)
+
+def _core_tooling_packages():
+  if not os.path.isfile(TOOLING_CORE_VIPC):
+    return []
+  packages, _ = _parse_vipc_packages(TOOLING_CORE_VIPC)
+  return packages
 
 # The core tooling VIPC is always baked into every worker; capability VIPCs live
 # under .github/labview/<cap>/<cap>.vipc and are baked only when that capability's

@@ -142,11 +142,13 @@ jobs:
           out_dir="ci-out/workers-pages/workers/windows/${wv}"
           mkdir -p ci-out/worker "$out_dir"
           : > ci-out/worker/nipkg-list.txt
+          : > ci-out/worker/vipm-list.txt
 
           python3 .github/labview/build-worker-manifest.py \
             --platform windows \
             --version "$wv" \
             --nipkg-list ci-out/worker/nipkg-list.txt \
+            --vipm-list ci-out/worker/vipm-list.txt \
             --labview-version "${{ vars.LABVIEW_VERSION || '2026' }}" \
             --pages-url "${PAGES_URL}" \
             --base-image "${BASE_IMAGE}" \

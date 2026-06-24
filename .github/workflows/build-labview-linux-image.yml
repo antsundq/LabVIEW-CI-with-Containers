@@ -364,17 +364,19 @@ jobs:
           image_ref="${{ env.IMAGE_NAME }}:${worker_version}"
           out_dir="ci-out/workers-pages/workers/linux/${worker_version}"
           mkdir -p ci-out/worker "$out_dir"
+          : > ci-out/worker/nipkg-list.txt
+          : > ci-out/worker/vipm-list.txt
           vipc_args=()
 
           if [ "${IS_SOURCE}" != "true" ] && [ "${VIPC_COUNT:-0}" = "0" ]; then
             # Seed-only copy: the worker mirrors the LCWC Linux base byte-for-byte and is
             # NOT present locally (copied at the registry level), so read the base metadata
             # from the registry with crane instead of pulling multiple gigabytes.
-            : > ci-out/worker/nipkg-list.txt
             base_image="${LCWC_LINUX_BASE_IMAGE}"
             base_digest="$(crane digest "${LCWC_LINUX_BASE_IMAGE}" 2>/dev/null || true)"
           else
             docker run --rm "$image_ref" bash -lc "nipkg list" > ci-out/worker/nipkg-list.txt 2>/dev/null || : > ci-out/worker/nipkg-list.txt
+            docker run --rm "$image_ref" bash -lc "vipm list --installed" > ci-out/worker/vipm-list.txt 2>/dev/null || : > ci-out/worker/vipm-list.txt
             base_image="nationalinstruments/labview:latest-linux"
             base_digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image_ref" 2>/dev/null || true)
             while IFS= read -r -d '' vipc_file; do
@@ -386,6 +388,7 @@ jobs:
             --platform linux \
             --version "$worker_version" \
             --nipkg-list ci-out/worker/nipkg-list.txt \
+            --vipm-list ci-out/worker/vipm-list.txt \
             --labview-version "${{ vars.LABVIEW_VERSION || '2026' }}" \
             --pages-url "${{ env.PAGES_URL }}" \
             --base-image "$base_image" \
