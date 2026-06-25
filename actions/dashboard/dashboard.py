@@ -352,11 +352,20 @@ file_commits = []
 # repo (source + hybrid installs); a thin consumer without them simply gets a
 # link that 404s, which is why the affordance is unobtrusive.
 RUN_TARGETS = {
+    # 'batch' (Windows only for now) is the OPT-IN warm-container path: the
+    # "Populate history" dialog's "keep one container warm across revisions" option
+    # dispatches this ONE workflow with a space-separated SHA list, which compiles
+    # every revision inside a single long-lived container (docker exec per commit)
+    # instead of one fresh container per revision. 'shas_input' names the
+    # workflow_dispatch input that carries the list. Absent 'batch' (e.g. Linux),
+    # the option falls back to the normal per-revision dispatch.
     'masscompile': {'label': 'Mass Compile', 'platforms': {
-        'windows': {'wf': 'masscompile-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}},
+        'windows': {'wf': 'masscompile-windows-container.yml', 'inputs': {'commit_sha': '{sha}'},
+                    'batch': {'wf': 'masscompile-backfill-windows.yml', 'shas_input': 'shas'}},
         'linux':   {'wf': 'masscompile-linux-container.yml',   'inputs': {'commit_sha': '{sha}'}}}},
     'vi-analyzer': {'label': 'VI Analyzer', 'platforms': {
-        'windows': {'wf': 'run-vi-analyzer-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}}}},
+        'windows': {'wf': 'run-vi-analyzer-windows-container.yml', 'inputs': {'commit_sha': '{sha}'},
+                    'batch': {'wf': 'vi-analyzer-backfill-windows.yml', 'shas_input': 'shas'}}}},
     'vidiff': {'label': 'VIDiff', 'platforms': {
         'windows': {'wf': 'vidiff-windows-container.yml', 'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}},
         'linux':   {'wf': 'vidiff-linux-container.yml',   'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}}}},
@@ -376,12 +385,14 @@ RUN_TARGETS = {
     # VIPM packages (Windows-only). The runner emits JUnit that
     # build-unittest-report.py normalises into one report.
     'unit-tests': {'label': 'Unit Tests', 'platforms': {
-        'windows': {'wf': 'unit-tests-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}}}},
+        'windows': {'wf': 'unit-tests-windows-container.yml', 'inputs': {'commit_sha': '{sha}'},
+                    'batch': {'wf': 'unit-tests-backfill-windows.yml', 'shas_input': 'shas'}}}},
     # Antidoc (Wovalab) documentation generation runs in the Windows worker only
     # (the Antidoc CLI is a VIPM package baked into the custom image). Doc-gen is
     # heavier than the per-VI checks, so it is on-demand / push-to-default-branch.
     'antidoc': {'label': 'Antidoc', 'platforms': {
-        'windows': {'wf': 'run-antidoc-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}}}},
+        'windows': {'wf': 'run-antidoc-windows-container.yml', 'inputs': {'commit_sha': '{sha}'},
+                    'batch': {'wf': 'antidoc-backfill-windows.yml', 'shas_input': 'shas'}}}},
 }
 
 # Gate run targets to the workflows ACTUALLY installed in this repo, so the
@@ -406,8 +417,17 @@ _installed_wf = _installed_workflow_files()
 if _installed_wf is not None:
     _gated_targets = {}
     for _cap, _cdef in RUN_TARGETS.items():
-        _plats = {_k: _v for _k, _v in (_cdef.get('platforms') or {}).items()
-                  if _v.get('wf') in _installed_wf}
+        _plats = {}
+        for _k, _v in (_cdef.get('platforms') or {}).items():
+            if _v.get('wf') not in _installed_wf:
+                continue
+            # Drop a warm-container 'batch' sub-target whose backfill workflow is
+            # not installed on this repo, so the dialog's reuse option falls back
+            # to per-revision dispatch instead of 404-ing on a missing workflow.
+            _b = _v.get('batch')
+            if _b and _b.get('wf') not in _installed_wf:
+                _v = {_kk: _vv for _kk, _vv in _v.items() if _kk != 'batch'}
+            _plats[_k] = _v
         if _plats:
             _ncdef = dict(_cdef); _ncdef['platforms'] = _plats
             _gated_targets[_cap] = _ncdef
@@ -415,6 +435,66 @@ if _installed_wf is not None:
 
 import json as _json
 run_targets_json = _json.dumps(RUN_TARGETS)
+
+# ── Warm-batch time estimate: per cap+platform median {total, work} seconds ──
+# Feeds the "Populate history" dialog's live Fresh-vs-Warm-batch estimate. Fully
+# automatic from history: 'work' is the median in-container compile time the
+# reports already record (masscompile summary.json 'duration'); 'total' is the
+# median wall-clock of recent completed runs of the per-commit workflow (the GH
+# Actions API run_started_at→updated_at). The client derives startup = total-work
+# and shows Fresh = N×total vs Warm = startup + N×work, falling back to built-in
+# defaults when a repo has no history yet. Bounded, best-effort, and never fatal.
+def _median(vals):
+    vs = sorted(v for v in vals if isinstance(v, (int, float)) and v > 0)
+    if not vs:
+        return None
+    n = len(vs); m = n // 2
+    return vs[m] if n % 2 else (vs[m - 1] + vs[m]) / 2.0
+
+_wf_total_cache = {}
+def _workflow_total_median(wf):
+    if wf in _wf_total_cache:
+        return _wf_total_cache[wf]
+    import datetime as _dt2
+    durs = []
+    data = gh_get(f'actions/workflows/{quote(wf, safe="")}/runs?status=completed&per_page=20')
+    for run in ((data or {}).get('workflow_runs') or []):
+        if run.get('conclusion') not in ('success', 'failure'):
+            continue
+        s = run.get('run_started_at') or run.get('created_at')
+        e = run.get('updated_at')
+        if not s or not e:
+            continue
+        try:
+            ds = _dt2.datetime.fromisoformat(str(s).replace('Z', '+00:00'))
+            de = _dt2.datetime.fromisoformat(str(e).replace('Z', '+00:00'))
+            sec = (de - ds).total_seconds()
+        except Exception:
+            continue
+        if 0 < sec < 6 * 3600:
+            durs.append(sec)
+    med = _median(durs)
+    _wf_total_cache[wf] = med
+    return med
+
+def build_run_timing():
+    # 'work' medians we can read cheaply from reports already loaded for the table.
+    mc_work = _median([(v or {}).get('duration') for v in _mc_cache.values()])
+    work_by_cap = {'masscompile': mc_work}
+    timing = {}
+    for cap, cdef in RUN_TARGETS.items():
+        if cap == 'snapshots':
+            continue
+        plats = {}
+        for pk, pv in (cdef.get('platforms') or {}).items():
+            wf = pv.get('wf')
+            if not wf:
+                continue
+            plats[pk] = {'total': _workflow_total_median(wf), 'work': work_by_cap.get(cap)}
+        if plats:
+            timing[cap] = plats
+    return timing
+
 
 # ── Active CI runs (queued / in progress) keyed by the commit they ran on ────
 # A freshly pushed revision starts its CI before any check posts a commit status,
@@ -983,6 +1063,7 @@ for c in commits_data:
 rows = '\n'.join(rows_html)
 hist_json = _json.dumps(hist_revs)
 caps_ran_json = _json.dumps({c: 1 for c in sorted(caps_ran)})
+run_timing_json = _json.dumps(build_run_timing())
 now  = __import__('datetime').datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
 
 # The "Include CI-only revisions" toggle is de-selected by default, so the
@@ -1335,6 +1416,7 @@ run_dialog = (r"""
   <script>
   (function(){
     var RT = __RUN_TARGETS__;
+    var RT_TIMING = __RUN_TIMING__;
     var REPO = "__REPO__";
     var BRANCH = "__BRANCH__";
     var TOK_KEY = "lvci_dispatch_token";
@@ -2083,7 +2165,8 @@ run_dialog = (r"""
       if(has(422)) return { html:'GitHub rejected the dispatch (HTTP 422) \u2014 usually a bad branch ref (<code>'+esc(BRANCH)+'</code>) or inputs.', tok:false };
       var st=(fails[0]||{}).status; return { html:'Could not queue runs (HTTP '+esc(String(st||'?'))+'). <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View Actions \u2197</a>', tok:false };
     }
-    function dispatchCells(cells, statusFn){
+    function dispatchCells(cells, statusFn, opts){
+      opts = opts || {}; var reuse = !!opts.reuse;
       var perRev=[]; var snapShas=[]; var sawSnap=false; var snapForce=false;
       cells.forEach(function(x){
         if(x.cap==='snapshots'){
@@ -2093,14 +2176,37 @@ run_dialog = (r"""
         else if(!(x.cap==='vidiff' && !x.parent)){ perRev.push(x); }   // a root commit has no base to diff
       });
       perRev.sort(function(a,b){ return b.order - a.order; });   // oldest first
-      var total=perRev.reduce(function(n,x){ return n + cellPlatforms(x).length; }, 0) + (sawSnap?1:0);
+      // Warm-container batch routing: when "keep one container warm" is on, every
+      // (cap, platform) that exposes a 'batch' backfill workflow is collapsed into
+      // ONE dispatch carrying the whole oldest→newest SHA list, so a single warm
+      // container renders every selected revision (docker exec per commit) instead
+      // of a fresh container per revision. A cell's platforms WITHOUT a batch
+      // target (e.g. Linux) keep dispatching per revision. x._plats holds the
+      // per-revision platforms that survive after batch ones are siphoned off.
+      var batchGroups={}; var batchOrder=[];
+      perRev.forEach(function(x){
+        var keep=[];
+        cellPlatforms(x).forEach(function(plat){
+          var p=(RT[x.cap] && RT[x.cap].platforms) ? RT[x.cap].platforms[plat] : null;
+          if(reuse && p && p.batch){
+            var key=x.cap+'|'+plat; var g=batchGroups[key];
+            if(!g){ g={cap:x.cap, plat:plat, wf:p.batch.wf, shasInput:(p.batch.shas_input||'shas'), shas:[], force:false}; batchGroups[key]=g; batchOrder.push(key); }
+            if(g.shas.indexOf(x.sha)<0) g.shas.push(x.sha);
+            if(x.mode==='rerun' || x.done) g.force=true;
+          } else { keep.push(plat); }
+        });
+        x._plats=keep;
+      });
+      var perRevActive=perRev.filter(function(x){ return x._plats.length>0; });
+      var total=perRevActive.reduce(function(n,x){ return n + x._plats.length; }, 0) + (sawSnap?1:0) + batchOrder.length;
       var t0=Date.now(); var ok=0, err=0, done=0; var fails=[];
       // Paint EVERY targeted cell as "Queued" up front, in one synchronous pass, so
       // the whole batch lights up the instant you click - independent of the throttled
       // dispatch chain below. A dispatch that truly fails then reverts just its own
       // cell, and a thrown error mid-chain can no longer leave the earlier cells un-queued.
       if(sawSnap){ snapShas.forEach(function(sha){ markQueued('snapshots', sha, ['all'], '', t0); }); }
-      perRev.forEach(function(x){ var d=RT[x.cap]; if(d) markQueued(x.cap, x.sha, cellPlatforms(x), x.parent, t0); });
+      batchOrder.forEach(function(key){ var g=batchGroups[key]; g.shas.forEach(function(sha){ markQueued(g.cap, sha, [g.plat], '', t0); }); });
+      perRevActive.forEach(function(x){ var d=RT[x.cap]; if(d) markQueued(x.cap, x.sha, x._plats, x.parent, t0); });
       statusFn('Queuing '+total+' workflow'+(total>1?'s':'')+'\u2026', null);
       var chain=Promise.resolve();
       // 1) Snapshots — one backfill run for the whole history (oldest→newest, deduped).
@@ -2115,11 +2221,26 @@ run_dialog = (r"""
           }).catch(function(){ err++; });
         });
       }
-      // 2) Per-revision capabilities, oldest first, gently throttled.
-      perRev.forEach(function(x){
+      // 2) Warm-container batch runs — one dispatch per (cap, platform) carrying the
+      // whole SHA list; the backfill workflow walks them oldest→newest in one
+      // container. force=true when any selected revision is a re-run/already done.
+      batchOrder.forEach(function(key){
+        var g=batchGroups[key];
+        chain=chain.then(function(){
+          var inputs={}; inputs[g.shasInput]=g.shas.join(' '); if(g.force) inputs.force='true';
+          return dispatchOne(g.wf, inputs).then(function(r){
+            done++;
+            if(r.ok){ ok++; }
+            else { err++; fails.push({wf:g.wf, status:r.status}); if(r.status===401) clearTok(); g.shas.forEach(function(sha){ qForget(g.cap, sha); }); }
+            statusFn('Queuing\u2026 '+done+'/'+total, null);
+          }).catch(function(){ err++; });
+        }).then(function(){ return new Promise(function(res){ setTimeout(res, 650); }); });
+      });
+      // 3) Per-revision capabilities, oldest first, gently throttled.
+      perRevActive.forEach(function(x){
         chain=chain.then(function(){
           var def=RT[x.cap]; if(!def){ return; }
-          var plats=cellPlatforms(x);
+          var plats=x._plats;
           var jobs=plats.map(function(k){
             var p=def.platforms[k]; var inputs=bfInputs(p, x.sha, x.parent);
             if(x.cap==='snapshots2' && (x.mode==='rerun' || x.done)) inputs.force='true';
@@ -2234,6 +2355,66 @@ run_dialog = (r"""
     }
     function histTokPanel(show){ var p=document.getElementById('cidash-hist-tok'); if(p) p.style.display = show ? 'block' : 'none'; }
     var actMode = {};                           // cap -> 'off' | 'fill' | 'rerun' (per-activity choice)
+    var reuseWarm = false;                       // opt-in: keep ONE container warm across the queued revisions
+    // ── Warm-container reuse + time estimate ───────────────────────────────
+    // A (cap, platform) is "batch-capable" when its run target carries a 'batch'
+    // backfill workflow (Windows only for now). The reuse toggle is only offered
+    // when at least one installed activity is batch-capable, and only batch-capable
+    // platforms actually collapse into a single warm-container run.
+    function capBatchPlatforms(capId){
+      var def=RT[capId]; if(!def || !def.platforms) return [];
+      return Object.keys(def.platforms).filter(function(k){ return !!(def.platforms[k] && def.platforms[k].batch); });
+    }
+    function anyBatchAvailable(){ return histInstalledCaps().some(function(c){ return capBatchPlatforms(c).length>0; }); }
+    // Default per-platform fallbacks (seconds) used only until a repo has run
+    // history to measure from. Windows containers are the slow case this feature
+    // targets; Linux start in seconds.
+    var TIMING_DEFAULT = { windows:{ startup:600, work:120 }, linux:{ startup:45, work:90 }, all:{ startup:120, work:90 } };
+    function timingFor(cap, plat){
+      // Returns {startup, work} seconds for one (cap, platform), derived from the
+      // server-injected medians (work = in-container compile time; total = whole
+      // run wall-clock; startup = total - work). Falls back to platform defaults.
+      var d=TIMING_DEFAULT[plat] || TIMING_DEFAULT.windows;
+      var t=(RT_TIMING && RT_TIMING[cap] && RT_TIMING[cap][plat]) ? RT_TIMING[cap][plat] : null;
+      var work = (t && t.work>0) ? t.work : d.work;
+      var startup;
+      if(t && t.total>0){ startup = Math.max(20, t.total - work); }
+      else { startup = d.startup; }
+      return { startup:startup, work:work, measured: !!(t && t.total>0) };
+    }
+    function fmtDur(sec){
+      sec=Math.max(0, Math.round(sec));
+      var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60);
+      if(h>0) return h+'h'+(m>0?(' '+m+'m'):'');
+      if(m>0) return m+'m';
+      return sec+'s';
+    }
+    function histEstimate(){
+      // Fresh vs warm-batch total compute time for the cells about to be queued.
+      // Fresh: every (cell, platform) pays startup+work. Warm: batch-capable
+      // (cap, platform) groups pay startup ONCE + work per revision; everything
+      // else is unchanged. Returns null when nothing measurable is selected.
+      var cells=histCells(); if(!cells.length) return null;
+      var fresh=0, warm=0, anyMeasured=false, anyBatch=false;
+      var groups={};   // cap|plat -> count (batch-capable, warm only)
+      cells.forEach(function(x){
+        if(x.cap==='snapshots') return;   // snapshots are already one backfill run
+        cellPlatforms(x).forEach(function(plat){
+          var tm=timingFor(x.cap, plat); if(tm.measured) anyMeasured=true;
+          fresh += tm.startup + tm.work;
+          var p=(RT[x.cap]&&RT[x.cap].platforms)?RT[x.cap].platforms[plat]:null;
+          if(reuseWarm && p && p.batch){
+            anyBatch=true; var key=x.cap+'|'+plat;
+            if(!groups[key]){ groups[key]={tm:tm, n:0}; }
+            groups[key].n++;
+          } else {
+            warm += tm.startup + tm.work;
+          }
+        });
+      });
+      Object.keys(groups).forEach(function(key){ var g=groups[key]; warm += g.tm.startup + g.n*g.tm.work; });
+      return { fresh:fresh, warm:warm, anyMeasured:anyMeasured, anyBatch:anyBatch };
+    }
     function histAllCells(){
       // EVERY per-revision activity cell on the table, tagged empty (a never-run run
       // glyph) vs done (a cell that already carries a result). bfCells() sees only the
@@ -2371,10 +2552,19 @@ run_dialog = (r"""
         var row=document.getElementById('cidash-hist-actrow-'+cap); if(row) row.classList.toggle('skip', mode==='off');
       });
       var cells=histCells();
-      var shas={}; var snaps=0; var perRev=0; var anyRe=false;
-      cells.forEach(function(x){ shas[x.sha]=1; if(x.cap==='snapshots') snaps=1; else perRev++; if(x.done) anyRe=true; });
-      var runs=perRev + snaps;   // snapshots collapse into one backfill run
+      var shas={}; var snaps=0; var perRevRuns=0; var anyRe=false; var groupKeys={};
+      cells.forEach(function(x){
+        shas[x.sha]=1; if(x.done) anyRe=true;
+        if(x.cap==='snapshots'){ snaps=1; return; }
+        cellPlatforms(x).forEach(function(plat){
+          var p=(RT[x.cap]&&RT[x.cap].platforms)?RT[x.cap].platforms[plat]:null;
+          if(reuseWarm && p && p.batch){ groupKeys[x.cap+'|'+plat]=1; }   // one warm-container run per (cap,platform)
+          else { perRevRuns++; }
+        });
+      });
+      var runs=perRevRuns + Object.keys(groupKeys).length + snaps;
       var nrev=Object.keys(shas).length;
+      var est=histEstimate();
       var sum=document.getElementById('cidash-hist-summary');
       if(sum){
         if(!HIST.length){ sum.innerHTML='No project revisions to populate yet \u2014 commit some VIs first.'; }
@@ -2385,9 +2575,23 @@ run_dialog = (r"""
           else if(anyOn){ sum.innerHTML='Nothing to queue for the selected revisions and activities.'; }
           else { sum.innerHTML='Pick at least one activity below \u2014 every one is set to <b>Skip</b>.'; }
         } else {
+          // Live, history-driven time estimate. When the warm-container option is on
+          // and at least one activity is batch-capable, show Fresh vs Warm compute
+          // and the saving; otherwise show the single estimate and nudge the option.
+          var estHtml='';
+          if(est){
+            if(reuseWarm && est.anyBatch){
+              estHtml = ' <span style="color:var(--fg-muted)">Est. compute: warm <b>'+fmtDur(est.warm)+'</b> vs fresh '+fmtDur(est.fresh)+' \u2014 saves \u2248 <b>'+fmtDur(Math.max(0,est.fresh-est.warm))+'</b> (runs serially in one container).</span>';
+            } else {
+              estHtml = ' <span style="color:var(--fg-muted)">Est. compute \u2248 '+fmtDur(est.fresh)
+                + (anyBatchAvailable()?' \u2014 tick \u201ckeep one container warm\u201d below to cut the repeated startup':'')+'.</span>';
+            }
+            if(!est.anyMeasured) estHtml += ' <span style="color:var(--fg-muted)">(approximate \u2014 no run history yet)</span>';
+          }
           sum.innerHTML='Will queue <b>'+runs+'</b> run'+(runs>1?'s':'')+' across <b>'+nrev+'</b> revision'+(nrev>1?'s':'')+', oldest first.'
             + (anyRe?' <span style="color:var(--fg-muted)">Re-runs replace the existing result.</span>':'')
-            + (runs>=20?' <span style="color:var(--fg-muted)">They queue and run in order, paced by your concurrency limit.</span>':'');
+            + (runs>=20 && !reuseWarm?' <span style="color:var(--fg-muted)">They queue and run in order, paced by your concurrency limit.</span>':'')
+            + estHtml;
         }
       }
       var go=document.getElementById('cidash-hist-go'); if(go) go.disabled = !runs;
@@ -2453,6 +2657,19 @@ run_dialog = (r"""
           + '</span></div>';
       });
       h += '</div></div>';
+      // Opt-in warm-container reuse — only shown when at least one installed
+      // activity is batch-capable (has a backfill workflow). OFF by default, with
+      // a prominent warning that state carries over between revisions.
+      if(anyBatchAvailable()){
+        h += '<div class="cidash-hist-sec"><label style="display:flex;gap:10px;align-items:flex-start;border:1px solid #da3633;background:rgba(218,54,51,.06);border-radius:8px;padding:10px 12px;cursor:pointer">'
+          + '<input type="checkbox" id="cidash-hist-reuse" style="margin-top:3px">'
+          + '<span style="font-size:.82em;line-height:1.5">'
+          + '<b style="color:#da3633">\u26A0 Keep one container warm across revisions</b> <span style="color:var(--fg-muted)">(off by default)</span><br>'
+          + '<span style="color:var(--fg-muted)">Pays the slow Windows container startup <b>once</b> for the whole batch instead of per revision \u2014 a big saving on long histories. '
+          + 'The trade-off: container state (temp files, the LabVIEW object cache, the registry) <b>carries over</b> between revisions, so a revision whose code modifies the system can influence a later revision\u2019s result. '
+          + 'The container image itself is never changed. Only Windows activities that support batching are affected \u2014 leave this off unless you understand the risk.</span>'
+          + '</span></label></div>';
+      }
       h += '<div id="cidash-hist-tok" style="display:none;border:1px solid var(--border);border-radius:8px;padding:12px;background:var(--surface);margin:0 0 12px">';
       h += '<div style="font-size:.82em;color:var(--fg);font-weight:600;margin-bottom:6px">One-time setup \u2014 a token to queue runs</div>';
       h += '<ol style="font-size:.8em;color:var(--fg-muted);margin:0 0 8px;padding-left:18px;line-height:1.6">';
@@ -2469,6 +2686,8 @@ run_dialog = (r"""
       h += '<button class="cidash-btn cidash-ghost" id="cidash-hist-cancel">Cancel</button></div>';
       body.innerHTML=h;
       instCaps.forEach(function(cap){ actMode[cap]='fill'; });   // open with every activity on Fill (gaps only)
+      reuseWarm=false;   // warm-container reuse always starts OFF
+      var rchk=document.getElementById('cidash-hist-reuse'); if(rchk) rchk.addEventListener('change', function(){ reuseWarm=!!rchk.checked; histRefresh(); });
       Array.prototype.forEach.call(document.querySelectorAll('.cidash-hist-chip'), function(b){ b.addEventListener('click', function(){ histPreset(b.getAttribute('data-preset')); }); });
       Array.prototype.forEach.call(document.querySelectorAll('.cidash-seg button'), function(b){ b.addEventListener('click', function(){ if(b.disabled) return; histSetMode(b.getAttribute('data-cap'), b.getAttribute('data-mode')); }); });
       Array.prototype.forEach.call(document.querySelectorAll('.cidash-hist-plat'), function(b){ b.addEventListener('change', function(){
@@ -2524,7 +2743,7 @@ run_dialog = (r"""
       histTokPanel(false);
       var go=document.getElementById('cidash-hist-go'); var cancel=document.getElementById('cidash-hist-cancel');
       if(go) go.disabled=true; if(cancel) cancel.disabled=true;
-      dispatchCells(cells, histStatus).then(function(res){
+      dispatchCells(cells, histStatus, {reuse: reuseWarm}).then(function(res){
         if(cancel) cancel.disabled=false;
         if(res.ok && !res.err){
           histStatus('\u2713 Queued '+res.ok+' run'+(res.ok>1?'s':'')+', oldest first \u2014 watch them fill in on the dashboard\u2026', 'ok');
@@ -2584,7 +2803,7 @@ run_dialog = (r"""
     document.addEventListener('visibilitychange', function(){ if(!document.hidden) qRecheck(); });
     window.addEventListener('focus', qRecheck);
   })();
-  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__HIST__', hist_json).replace('__CAPS_RAN__', caps_ran_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
+  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__RUN_TIMING__', run_timing_json).replace('__HIST__', hist_json).replace('__CAPS_RAN__', caps_ran_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
 
 # ── "Run CI for your whole history" card (fresh installs only) ───────────────
 # A brand-new dashboard has no results, so every project cell shows a one-click
