@@ -1,7 +1,7 @@
 {
-  "version": "linux-beta-90a3109bc81e",
+  "version": "linux-beta-39b0e24ba44c",
   "platform": "linux-beta",
-  "manifest_url": "https://elijah286.github.io/LabVIEW-CI-with-Containers/workers/linux-beta/linux-beta-90a3109bc81e/manifest.html",
-  "build_date": "2026-06-23T17:50:43Z",
-  "git_sha": "d5d758cc1868458237275f7a4dc331703cfd320d"
+  "manifest_url": "https://antsundq.github.io/LabVIEW-CI-with-Containers/workers/linux-beta/linux-beta-39b0e24ba44c/manifest.html",
+  "build_date": "2026-06-29T05:05:55Z",
+  "git_sha": "3e16c29ae53dcfd462d75bf5bf3147e0ffea6be2"
 }

@@ -1,0 +1,21 @@
+{
+  "schema": 2,
+  "platform": "linux-beta",
+  "version": "linux-beta-39b0e24ba44c",
+  "labview_version": "2026",
+  "base_image": "ghcr.io/elijah286/labview-ci-with-containers-labview:linux-beta-2026",
+  "base_digest": "sha256:17b6ce082a6f1fa302846f37953a4c6cd54e6af4b8f2f6d9e1662f9326dd009b",
+  "seed_image": "",
+  "seed_digest": "",
+  "worker_layer": "",
+  "copied_from_base": false,
+  "image_ref": "ghcr.io/antsundq/labview-ci-with-containers-labview:linux-beta-39b0e24ba44c",
+  "build_date": "2026-06-29T05:05:55Z",
+  "git_sha": "3e16c29ae53dcfd462d75bf5bf3147e0ffea6be2",
+  "run_url": "https://github.com/antsundq/LabVIEW-CI-with-Containers/actions/runs/28349879557",
+  "vipc": [],
+  "vipm_raw": "",
+  "vipm_packages": [],
+  "nipkg_raw": "",
+  "nipkg_packages": []
+}
