@@ -40,14 +40,14 @@ permissions:
   pages: write
   statuses: write
   packages: read
+  actions: read   # so wait-for-worker-image.sh can read the worker-image build runs
 
-# No shared concurrency group: this Linux report deploys to gh-pages directly
-# with no group. The Windows report workflows
-# share `report-pages-deploy` (cancel-in-progress:false) to serialize their pushes,
-# but GitHub keeps only one *pending* run per group — so adding a third member
-# would make a normal push cancel one of the three. The Linux job writes to a
-# disjoint path (masscompile/<sha>/linux/) with keep_files:true, so a rare
-# overlapping push is additive rather than destructive.
+# This Linux report deploys to gh-pages directly. Every report workflow now uses
+# its own per-activity+revision concurrency group, so different activities run in
+# parallel and never cancel each other; the retry-safe publish-gh-pages action
+# handles any overlapping pushes. This Linux job also writes to a disjoint path
+# (masscompile/<sha>/linux/) with keep_files:true, so an overlapping push is
+# additive rather than destructive.
 
 jobs:
   mass-compile-linux:
@@ -61,8 +61,17 @@ jobs:
         run: |
           INPUT="${{ github.event.inputs.commit_sha }}"
           if [ -n "$INPUT" ]; then
-            FULL=$(gh api "repos/${{ github.repository }}/commits/$INPUT" --jq '.sha')
-            echo "sha=$FULL" >> "$GITHUB_OUTPUT"
+            if printf '%s' "$INPUT" | grep -Eiq '^[0-9a-f]{40}$'; then
+              # Already a full commit SHA - use it directly. Skipping the gh API
+              # round-trip keeps a transient rate-limit (HTTP 403) from hard-failing
+              # the whole run at 'Determine target SHA'.
+              echo "sha=$INPUT" >> "$GITHUB_OUTPUT"
+            else
+              # A short SHA / ref: try to expand it, but fall back to the raw input
+              # (never abort) if the API call fails or is rate-limited.
+              FULL=$(gh api "repos/${{ github.repository }}/commits/$INPUT" --jq '.sha' 2>/dev/null || true)
+              echo "sha=${FULL:-$INPUT}" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
@@ -121,7 +130,6 @@ jobs:
           case "$selected" in
             ''|latest) image="ghcr.io/${owner}/${name}:linux-latest"; worker_workflow="Build LabVIEW CI Image - Linux" ;;
             base|none) image="nationalinstruments/labview:latest-linux"; worker_workflow="" ;;
-            linux-beta-*) image="ghcr.io/${owner}/${name}:${selected}"; worker_workflow="Build LabVIEW CI Image - Linux Beta" ;;
             linux-*) image="ghcr.io/${owner}/${name}:${selected}"; worker_workflow="Build LabVIEW CI Image - Linux" ;;
             *) image="ghcr.io/${owner}/${name}:linux-${selected}"; worker_workflow="Build LabVIEW CI Image - Linux" ;;
           esac
@@ -138,6 +146,14 @@ jobs:
             exit 0
           fi
           bash .github/labview/wait-for-worker-image.sh "${{ steps.sha.outputs.sha }}" "${{ github.event.before }}" "$LINUX_WORKER_WORKFLOW"
+
+      - name: Log in to GHCR
+        if: env.LABVIEW_CONTAINER_IMAGE != 'nationalinstruments/labview:latest-linux'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull LabVIEW Linux container
         id: pull
