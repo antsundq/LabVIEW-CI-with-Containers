@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import html, json, os, re, sys, urllib.request, urllib.error, zipfile
+import html, json, os, re, sys, time, urllib.request, urllib.error, zipfile
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
 
@@ -7,7 +7,27 @@ token    = os.environ['GH_TOKEN']
 repo     = os.environ['REPO']
 pages_url = os.environ['PAGES_URL']
 
-def gh_get(path):
+# API health: a persistent failure while fetching commit history must NOT
+# blank the good dashboard (see the fetch_commits guard). gh_get sets this
+# when a transient failure (rate limit / 5xx / network) survives its retries.
+_API = {'degraded': False}
+
+def _retry_delay(err, attempt):
+    # Prefer the server's own guidance: Retry-After (seconds), or seconds until
+    # X-RateLimit-Reset for a primary rate limit; else capped exponential
+    # backoff. Bounded so a build never hangs on a long reset window.
+    hdrs = getattr(err, 'headers', None)
+    if hdrs is not None:
+        ra = hdrs.get('Retry-After')
+        if ra and str(ra).strip().isdigit():
+            return min(30, max(1, int(ra)))
+        if str(hdrs.get('X-RateLimit-Remaining', '')).strip() == '0':
+            reset = hdrs.get('X-RateLimit-Reset')
+            if reset and str(reset).strip().isdigit():
+                return min(30, max(1, int(reset) - int(time.time())))
+    return min(30, 2 ** attempt)
+
+def gh_get(path, _tries=4):
     # NOTE: an empty path must hit the bare repo endpoint (…/repos/{repo}); a
     # trailing slash (…/repos/{repo}/) makes GitHub return 404, which silently
     # broke get_default_branch() below. Only join the '/' when there IS a path.
@@ -17,12 +37,38 @@ def gh_get(path):
         'Accept': 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
     })
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return json.load(r)
-    except urllib.error.HTTPError as e:
-        print(f"  HTTP {e.code} for {path}", file=sys.stderr)
-        return None
+    # Rate limits (primary 403 with x-ratelimit-remaining:0, secondary 403/429)
+    # and 5xx are TRANSIENT: a burst of CI activity easily trips a secondary
+    # rate limit, and a single flaky call used to return None and silently
+    # blank the dashboard. Retry those with backoff (honoring Retry-After /
+    # X-RateLimit-Reset); a dropped connection / timeout is retried too. Only a
+    # PERSISTENT failure returns None AND marks the API degraded, which makes
+    # the build refuse to publish a truncated dashboard (see fetch_commits).
+    # Once degraded, further calls try once (the limit will not clear in 30s).
+    n_tries = 1 if _API['degraded'] else _tries
+    for attempt in range(n_tries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            transient = e.code in (403, 429) or 500 <= e.code < 600
+            if transient and attempt < n_tries - 1:
+                delay = _retry_delay(e, attempt)
+                print(f"  HTTP {e.code} for {path}; retrying in {delay}s "
+                      f"(attempt {attempt + 1}/{n_tries})", file=sys.stderr)
+                time.sleep(delay)
+                continue
+            print(f"  HTTP {e.code} for {path}", file=sys.stderr)
+            if transient:
+                _API['degraded'] = True
+            return None
+        except (urllib.error.URLError, TimeoutError) as e:
+            if attempt < n_tries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            print(f"  network error for {path}: {e}", file=sys.stderr)
+            _API['degraded'] = True
+            return None
 
 # ── Resolve the repo's default branch (NOT hard-coded 'main') ─────
 # Consumers commonly use 'master' or other default branches. Hard-coding 'main'
@@ -151,6 +197,21 @@ def masscompile_summary(sha, platform='windows'):
     _mc_cache[key] = data if isinstance(data, dict) else None
     return _mc_cache[key]
 
+_builds_cache = {}
+def builds_summary(sha, platform='windows'):
+    # {platform, status, total, built, skipped, failed, duration, labview_version,
+    # specs[...]} written by build-binaries.ps1 / build-binaries.sh and deployed
+    # alongside the Builds report at builds/<sha>/summary.json (Windows) and
+    # builds/<sha>/linux/summary.json (Linux). Lets the Builds column show a split
+    # pill of succeeded vs failed build specifications, per platform.
+    key = (sha, platform)
+    if key in _builds_cache:
+        return _builds_cache[key]
+    sub = 'linux/' if platform == 'linux' else ''
+    data = http_json(f"{pages_url}/builds/{sha}/{sub}summary.json")
+    _builds_cache[key] = data if isinstance(data, dict) else None
+    return _builds_cache[key]
+
 _ut_cache = {}
 def unit_tests_summary(sha, platform='windows'):
     # build-unittest-report.py deploys the same model that renders the friendly
@@ -165,6 +226,23 @@ def unit_tests_summary(sha, platform='windows'):
     summary = (data or {}).get('summary') if isinstance(data, dict) else None
     _ut_cache[key] = summary if isinstance(summary, dict) else None
     return _ut_cache[key]
+
+_via_cache = {}
+def vi_analyzer_summary(sha, platform='windows'):
+    # {meta, summary:{vis_analyzed, tests_run, passed, failed, skipped, findings,
+    # vis_with_findings}, errors:{vi_not_loadable, ...}, rule_counts[...]} written by
+    # build-analyzer-report.py and deployed alongside the report at
+    # vi-analyzer/<sha>/summary.json (Windows) and vi-analyzer/<sha>/linux/summary.json
+    # (Linux). Lets the VI Analyzer column show the finding count per platform (and
+    # flag a degraded analysis) instead of a binary pass/fail, and report Windows and
+    # Linux separately since the two containers can analyze a different set of VIs.
+    key = (sha, platform)
+    if key in _via_cache:
+        return _via_cache[key]
+    sub = 'linux/' if platform == 'linux' else ''
+    data = http_json(f"{pages_url}/vi-analyzer/{sha}/{sub}summary.json")
+    _via_cache[key] = data if isinstance(data, dict) else None
+    return _via_cache[key]
 
 def _pct_threshold(value, default):
     try:
@@ -212,6 +290,56 @@ def unit_test_badge_kind(pass_pct):
     if pass_pct < UNIT_TEST_THRESHOLDS['redBelow']:
         return 'fail'
     return 'warn'
+
+def masscompile_thresholds():
+    # The Mass Compile badge shows the % of project VIs that compiled. Colour it
+    # with configurable thresholds (like the Unit Tests column) instead of a
+    # near-flat amber. Defaults: green >= 95% compiled, yellow >= 80%, red below
+    # 80%. Read from .github/labview-ci.yml under massCompile.thresholds. A true
+    # compile failure (LabVIEW could not finish the compile) is handled
+    # separately and always renders as a solid bright-red pill.
+    vals = {'greenAtLeast': 95, 'yellowAtLeast': 80, 'redBelow': 80}
+    try:
+        in_mc = in_thresholds = in_pct = False
+        for raw in open('.github/labview-ci.yml', encoding='utf-8'):
+            line = raw.replace('\t', '    ').rstrip('\n')
+            if re.match(r'^massCompile:\s*$', line):
+                in_mc = True; in_thresholds = False; in_pct = False; continue
+            if in_mc and re.match(r'^\S', line):
+                break
+            if not in_mc:
+                continue
+            if re.match(r'^\s{2}thresholds:\s*$', line):
+                in_thresholds = True; in_pct = False; continue
+            if in_thresholds and re.match(r'^\s{4}(compiledPercent|compilePercent|percent):\s*$', line):
+                in_pct = True; continue
+            if in_pct:
+                m = re.match(r'^\s{6}(greenAtLeast|yellowAtLeast|redBelow):\s*([^#\s]+)', line)
+                if m:
+                    vals[m.group(1)] = _pct_threshold(m.group(2), vals[m.group(1)])
+                    continue
+                if re.match(r'^\s{0,5}\S', line):
+                    in_pct = False
+    except Exception:
+        pass
+    vals['greenAtLeast'] = max(vals['greenAtLeast'], vals['yellowAtLeast'])
+    vals['redBelow'] = min(vals['redBelow'], vals['yellowAtLeast'])
+    return vals
+
+MASSCOMPILE_THRESHOLDS = masscompile_thresholds()
+
+def masscompile_badge_kind(percent, status=None):
+    # Returns (chip-kind, solid) for a Mass Compile percentage. A true failure
+    # (LabVIEW could not complete the compile) is always a solid, bright-red pill
+    # regardless of the numeric value; otherwise colour by the configurable
+    # compiled-percentage thresholds (green/yellow/red).
+    if status == 'failed':
+        return 'fail', True
+    if percent >= MASSCOMPILE_THRESHOLDS['greenAtLeast']:
+        return 'pass', False
+    if percent >= MASSCOMPILE_THRESHOLDS['yellowAtLeast']:
+        return 'warn', False
+    return 'fail', False
 
 # LabVIEW / NI source-file extensions. A revision that touches one of
 # these (outside the CI tooling — see below) is a change to the actual
@@ -265,19 +393,29 @@ def classify_commit(sha):
 # until enough project revisions are collected (or a hard scan cap is hit). Beyond
 # the recent window only PROJECT revisions are kept, so the deeper scan surfaces
 # project history without flooding the table with old CI commits.
+#
+# The cap must stay well ahead of the tooling-to-project commit ratio: EVERY CI
+# run (dashboard rebuilds, catalog bumps, snapshot backfills, …) adds tooling
+# commits to main, so the project's earliest revisions sink deeper over time. If
+# the cap is too tight it silently truncates the OLDEST project revisions off the
+# bottom of the table (the table appears to "get shorter" as CI activity grows).
+# The paging still stops early once _PROJECT_TARGET project revisions are found or
+# history is exhausted, so the cap only ever engages on a genuinely huge history.
 _RECENT_WINDOW  = 100   # always keep at least this many most-recent commits
 _PROJECT_TARGET = 30    # keep paging until this many project revisions are found
-_SCAN_CAP       = 500   # never classify more than this many commits (cost guard)
+_SCAN_CAP       = 3000  # never classify more than this many commits (cost guard)
 def fetch_commits():
     out, n_proj, n_scanned, page = [], 0, 0, 1
     branch = get_default_branch()
-    while n_scanned < _SCAN_CAP:
+    while n_scanned < _SCAN_CAP and not _API['degraded']:
         batch = gh_get(f'commits?sha={branch}&per_page=100&page={page}') or []
         if not batch:
             break
         for c in batch:
             n_scanned += 1
             info = classify_commit(c['sha'])
+            if _API['degraded']:
+                break
             if n_scanned <= _RECENT_WINDOW or info['is_project']:
                 out.append(c)
             if info['is_project']:
@@ -289,6 +427,22 @@ def fetch_commits():
         page += 1
     return out
 commits_data = fetch_commits()
+
+# Refuse to publish a degraded dashboard. If a GitHub API call failed
+# (rate-limit / outage / network) while LISTING or CLASSIFYING commits - even
+# after gh_get's retries - the revision history is incomplete. Publishing now
+# would overwrite the good dashboard with a blank or truncated one (exactly
+# what a burst of concurrent CI activity used to cause, since the project's
+# own revisions can sit hundreds of tooling commits deep and the deep-scan
+# that surfaces them is the first thing a rate limit cuts off). Fail the build
+# instead: the deploy step is skipped, the previous good dashboard stays live,
+# and the next trigger rebuilds once the API recovers.
+if _API['degraded']:
+    sys.exit("::error::GitHub API was rate-limited or unavailable while "
+             "reading commit history, so the revision data is incomplete. "
+             "Refusing to publish a blank or truncated dashboard over the "
+             "good one - the previous dashboard stays live and rebuilds "
+             "automatically once the API recovers.")
 
 # ── List the VI files present at a revision ─────────────────
 # Powers the VI Browser's file tree INDEPENDENTLY of whether snapshots have
@@ -372,7 +526,8 @@ RUN_TARGETS = {
         'linux':   {'wf': 'masscompile-linux-container.yml',   'inputs': {'commit_sha': '{sha}'}}}},
     'vi-analyzer': {'label': 'VI Analyzer', 'platforms': {
         'windows': {'wf': 'run-vi-analyzer-windows-container.yml', 'inputs': {'commit_sha': '{sha}'},
-                    'batch': {'wf': 'vi-analyzer-backfill-windows.yml', 'shas_input': 'shas'}}}},
+                    'batch': {'wf': 'vi-analyzer-backfill-windows.yml', 'shas_input': 'shas'}},
+        'linux':   {'wf': 'run-vi-analyzer-linux-container.yml', 'inputs': {'commit_sha': '{sha}'}}}},
     'vidiff': {'label': 'VIDiff', 'platforms': {
         'windows': {'wf': 'vidiff-windows-container.yml', 'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}},
         'linux':   {'wf': 'vidiff-linux-container.yml',   'inputs': {'head_sha': '{sha}', 'base_sha': '{parent}'}}}},
@@ -400,6 +555,13 @@ RUN_TARGETS = {
     'antidoc': {'label': 'Antidoc', 'platforms': {
         'windows': {'wf': 'run-antidoc-windows-container.yml', 'inputs': {'commit_sha': '{sha}'},
                     'batch': {'wf': 'antidoc-backfill-windows.yml', 'shas_input': 'shas'}}}},
+    # Builds: run the project's LabVIEW build specifications (EXE, PPL, shared
+    # library, source distribution, ...) headlessly. Cross-platform where the
+    # spec type allows; Installer / .NET Interop are Windows-only (skipped on
+    # Linux, never failed).
+    'builds': {'label': 'Builds', 'platforms': {
+        'windows': {'wf': 'build-binaries-windows-container.yml', 'inputs': {'commit_sha': '{sha}'}},
+        'linux':   {'wf': 'build-binaries-linux-container.yml',   'inputs': {'commit_sha': '{sha}'}}}},
 }
 
 # Gate run targets to the workflows ACTUALLY installed in this repo, so the
@@ -570,13 +732,42 @@ _CHIP_ICON = {
 }
 _STATE_KIND = {'success': 'pass', 'failure': 'fail', 'error': 'fail', 'pending': 'warn'}
 
-def _chip(kind, label, url='', title=''):
+def _chip(kind, label, url='', title='', solid=False):
     """Render a status pill. ``kind`` in {pass,fail,warn,info}; ``label`` is the
-    text; ``url`` makes it a link; ``title`` is an optional tooltip."""
+    text; ``url`` makes it a link; ``title`` is an optional tooltip. ``solid``
+    fills the pill with its state colour (used for a hard failure -- e.g. a Mass
+    Compile run LabVIEW could not complete -- so it reads as bright, filled red)."""
     icon = _CHIP_ICON.get(kind, '')
     lab  = f'<a href="{url}" style="color:inherit">{label}</a>' if url else label
     ttl  = f' title="{title}"' if title else ''
-    return f'<span class="cidash-chip cc-{kind}"{ttl}>{icon}{lab}</span>'
+    cls  = f'cc-{kind}' + (' cc-solid' if solid else '')
+    return f'<span class="cidash-chip {cls}"{ttl}>{icon}{lab}</span>'
+
+def _chip_split(segments, url='', title=''):
+    """Render a neutral status pill whose individual values carry their own
+    colour, instead of tinting the whole pill one (worst-wins) colour. Use it
+    when one cell reports two values that can legitimately differ in state -
+    e.g. the Windows vs Linux mass-compile percentages - so each value's colour
+    tells its own story. ``segments`` is a list of ``(kind, text, label)`` or
+    ``(kind, text, label, solid)`` tuples joined by a muted separator; a
+    ``solid`` segment is filled with its state colour (used for a hard compile
+    failure). ``label`` is shown as an instant
+    (CSS-driven, no native-tooltip delay) mouse-over naming the value, e.g.
+    "Windows" or "Linux". ``url`` makes it a link; ``title`` is an optional
+    pill-level tooltip. A failing segment keeps the ``cc-fail`` class so the
+    table's row-status filter still rolls the row up to "failed"."""
+    parts = []
+    for seg in segments:
+        _k, _t = seg[0], seg[1]
+        _lab = seg[2] if len(seg) > 2 else ''
+        _solid = seg[3] if len(seg) > 3 else False
+        _tip = f' data-tip="{_lab}"' if _lab else ''
+        _cls = f'cc-{_k}' + (' cc-solid' if _solid else '')
+        parts.append(f'<span class="cidash-vseg {_cls}"{_tip}>{_t}</span>')
+    inner = '<span class="cidash-vseg-sep">/</span>'.join(parts)
+    body  = f'<a href="{url}" style="color:inherit">{inner}</a>' if url else inner
+    ttl   = f' title="{title}"' if title else ''
+    return f'<span class="cidash-chip cc-split"{ttl}>{body}</span>'
 
 # ── Framed per-revision reports ─────────────────────────────────────────────────────
 # Per-revision reports (Mass Compile, VI Analyzer) open INSIDE the dashboard
@@ -586,7 +777,7 @@ def _chip(kind, label, url='', title=''):
 # is opened, and reports that predate the header (or carry none of their own)
 # still appear inside the chrome. Diff/Snapshots already open the VI Browser (its
 # own headered page), so only these two doctypes are wrapped here.
-DOC_LABELS = {'vi-analyzer-report': 'VI Analyzer', 'masscompile-report': 'Mass Compile', 'unit-tests-report': 'Unit Tests', 'antidoc-report': 'Antidoc'}
+DOC_LABELS = {'vi-analyzer-report': 'VI Analyzer', 'masscompile-report': 'Mass Compile', 'unit-tests-report': 'Unit Tests', 'antidoc-report': 'Antidoc', 'builds-report': 'Builds'}
 
 def viewer_url(report_url, doctype, sha, short, platform=''):
     """Wrap a deployed report's absolute Pages URL so it opens framed under the
@@ -701,6 +892,7 @@ for c in commits_data:
             'message': msg,
             'author': author,
             'date': date,
+            'dep_only': bool(_info.get('is_dep_only')),
             'vis': vi_tree(sha),
         })
         # Newest-first list of revisions the history dialog can populate.
@@ -712,6 +904,7 @@ for c in commits_data:
             'sha': sha,
             'short': short,
             'msg': msg,
+            'dep_only': bool(_info.get('is_dep_only')),
             'snapshots2': {
                 'windows': {'have': _s2w_have, 'total': _s2w_total},
                 'linux': {'have': _s2l_have, 'total': _s2l_total},
@@ -886,11 +1079,7 @@ for c in commits_data:
         _mc_lin = masscompile_summary(sha, 'linux')
         _mc_live = active_run_cell('masscompile', 'compile')
         def _mc_kind(_s):
-            _p = _s.get('percent')
-            _st = _s.get('status')
-            _f = (_st == 'failed') or (_st is None and _p <= 0)
-            _ps = (_st == 'passed') or (_st is None and _p >= 100)
-            return 'pass' if _ps else ('fail' if _f else 'warn')
+            return masscompile_badge_kind(_s.get('percent') or 0, _s.get('status'))
         _present = [(plat, s) for plat, s in (('windows', _mc_win), ('linux', _mc_lin))
                     if s and isinstance(s.get('percent'), int)]
         if _mc_live is not None:
@@ -908,27 +1097,98 @@ for c in commits_data:
             # see Mass Compile as "done" (so its Re-run is offered, not greyed out)
             # and lets the optimistic "Queued" overlay land on the cell on a re-run.
             _mc_ts = (pick_status('CI / Mass Compile') or pick_status('CI / Mass Compile (Linux)') or {}).get('created_at', '')
+            _gt = MASSCOMPILE_THRESHOLDS
+            _gate = (f'green >= {_gt["greenAtLeast"]}%, yellow >= {_gt["yellowAtLeast"]}%, '
+                     f'red < {_gt["redBelow"]}% (a compile failure is solid red)')
             if len(_present) == 2:
                 # Windows and Linux can compile a different set of VIs, so show
-                # both as a two-number pill (Windows / Linux), worst colour wins.
+                # both as a two-number pill (Windows / Linux). Their results can
+                # diverge sharply (e.g. all VIs compile on Windows but a missing
+                # Linux dependency fails the whole project), so colour each
+                # percentage by its own state instead of tinting the entire pill
+                # the single worst colour. Each value also carries an instant
+                # mouse-over naming its platform (Windows / Linux).
                 _wp, _lp = _mc_win['percent'], _mc_lin['percent']
-                _kinds = (_mc_kind(_mc_win), _mc_kind(_mc_lin))
-                _kind = 'fail' if 'fail' in _kinds else ('warn' if 'warn' in _kinds else 'pass')
-                _label = f'{_wp}% / {_lp}%'
+                _wk, _ws = _mc_kind(_mc_win)
+                _lk, _ls = _mc_kind(_mc_lin)
                 _tip = (f'Windows {_wp}% ({_mc_win.get("ok",0)}/{_mc_win.get("total",0)}) · '
-                        f'Linux {_lp}% ({_mc_lin.get("ok",0)}/{_mc_lin.get("total",0)}) project VIs compiled')
+                        f'Linux {_lp}% ({_mc_lin.get("ok",0)}/{_mc_lin.get("total",0)}) project VIs compiled; '
+                        f'{_gate}')
+                _chip_html = _chip_split([(_wk, f'{_wp}%', 'Windows', _ws),
+                                          (_lk, f'{_lp}%', 'Linux', _ls)], _url, _tip)
             else:
                 _plat, _mc = _present[0]
-                _kind = _mc_kind(_mc)
+                _kind, _solid = _mc_kind(_mc)
                 _label = f'{_mc["percent"]}%'
-                _tip = f'{_plat.capitalize()}: {_mc.get("ok",0)}/{_mc.get("total",0)} project VIs compiled'
+                _tip = (f'{_plat.capitalize()}: {_mc.get("ok",0)}/{_mc.get("total",0)} project VIs compiled; '
+                        f'{_gate}')
+                _chip_html = _chip(_kind, _label, _url, _tip, solid=_solid)
             mc_badge = (f'<td style="text-align:center" class="cidash-cap-cell" data-cap="masscompile" '
                         f'data-sha="{sha}" data-parent="{parent}" data-short="{short}" data-ts="{_mc_ts}">'
-                        f'{_chip(_kind, _label, _url, _tip)}</td>')
+                        f'{_chip_html}</td>')
         else:
             mc_badge = badge('compile', 'CI / Mass Compile', cap='masscompile', doc=('masscompile-report', 'masscompile'))
-    via_badge = badge('analyze',   'CI / VI Analyzer', cap='vi-analyzer',
-                      doc=('vi-analyzer-report', 'vi-analyzer'))
+    # VI Analyzer column: show the number of findings (failed-test instances) per
+    # platform, sourced from the run's summary.json, so the table conveys the
+    # analysis outcome at a glance and reports Windows and Linux separately (the two
+    # containers can analyze a different set of VIs). A degraded analysis (un-loadable
+    # VIs, or zero VIs analyzed) is flagged solid red. Falls back to the plain status
+    # badge for older runs that predate summary.json.
+    if not is_project:
+        via_badge = EMPTY_CELL
+    else:
+        _via_win = vi_analyzer_summary(sha, 'windows')
+        _via_lin = vi_analyzer_summary(sha, 'linux')
+        _via_live = active_run_cell('vi-analyzer', 'analyze')
+        def _via_findings(_d):
+            _s = _d.get('summary') or {}
+            _f = _s.get('findings')
+            return (_s.get('failed') or 0) if _f is None else _f
+        def _via_seg(_d):
+            _s = _d.get('summary') or {}
+            _e = _d.get('errors') or {}
+            _find = _via_findings(_d)
+            _degraded = (_s.get('vis_analyzed') or 0) == 0 or any(
+                (_e.get(k) or 0) > 0 for k in
+                ('vi_not_loadable', 'test_not_loadable', 'test_not_runnable', 'test_error_out'))
+            if _degraded:
+                return ('fail', str(_find), True)
+            if _find > 0:
+                return ('warn', str(_find), False)
+            return ('pass', '0', False)
+        def _via_tip(_plat, _d):
+            _s = _d.get('summary') or {}
+            _f = _via_findings(_d)
+            return (f'{_plat}: {_f} finding{"" if _f == 1 else "s"} across '
+                    f'{_s.get("vis_with_findings", 0)} VI(s), {_s.get("vis_analyzed", 0)} analyzed')
+        _via_present = [(plat, s) for plat, s in (('windows', _via_win), ('linux', _via_lin))
+                        if s and isinstance(s.get('summary'), dict)]
+        if _via_live is not None:
+            via_badge = _via_live
+        elif _via_present:
+            any_output['on'] = True
+            caps_ran.add('vi-analyzer')
+            _via_ts = (pick_status('CI / VI Analyzer') or pick_status('CI / VI Analyzer (Linux)') or {}).get('created_at', '')
+            if len(_via_present) == 2:
+                _via_url = viewer_url(f'{pages_url}/vi-analyzer/{sha}/index.html', 'vi-analyzer-report', sha, short)
+                _wk, _wt, _ws = _via_seg(_via_win)
+                _lk, _lt, _ls = _via_seg(_via_lin)
+                _via_tt = _via_tip('Windows', _via_win) + ' \u00b7 ' + _via_tip('Linux', _via_lin)
+                _via_chip = _chip_split([(_wk, _wt, 'Windows', _ws), (_lk, _lt, 'Linux', _ls)], _via_url, _via_tt)
+            else:
+                _via_plat, _via_d = _via_present[0]
+                _via_sub = 'linux/' if _via_plat == 'linux' else ''
+                _via_url = viewer_url(f'{pages_url}/vi-analyzer/{sha}/{_via_sub}index.html',
+                                      'vi-analyzer-report', sha, short, _via_plat)
+                _vk, _vt, _vsolid = _via_seg(_via_d)
+                _via_tt = _via_tip(_via_plat.capitalize(), _via_d)
+                _via_chip = _chip(_vk, _vt, _via_url, _via_tt, solid=_vsolid)
+            via_badge = (f'<td style="text-align:center" class="cidash-cap-cell" data-cap="vi-analyzer" '
+                         f'data-sha="{sha}" data-parent="{parent}" data-short="{short}" data-ts="{_via_ts}">'
+                         f'{_via_chip}</td>')
+        else:
+            via_badge = badge('analyze', 'CI / VI Analyzer', 'CI / VI Analyzer (Linux)', cap='vi-analyzer',
+                              doc=('vi-analyzer-report', 'vi-analyzer'))
     # VIDiff column: rather than a single "diff" badge, show the SHAPE of the
     # revision — how many VIs are different / new / deleted versus its parent —
     # so the table conveys at a glance what each revision did, not just that a
@@ -1069,6 +1329,51 @@ for c in commits_data:
     antidoc_badge = badge('docs', 'CI / Antidoc', cap='antidoc',
                           doc=('antidoc-report', 'antidoc'))
 
+    # Builds column: a split pill of build specifications that SUCCEEDED vs FAILED
+    # for this revision (e.g. "2 / 1"), aggregated across the Windows and Linux
+    # build runs and sourced from each run's summary.json. An empty project cell
+    # offers a one-click run; a project with no build specifications renders a
+    # plain dash.
+    def builds_cell():
+        if not is_project:
+            return EMPTY_CELL
+        _bw = builds_summary(sha, 'windows')
+        _bl = builds_summary(sha, 'linux')
+        _live = active_run_cell('builds', 'build')
+        if _live is not None:
+            caps_ran.add('builds')
+            return _live
+        _present = [(plat, s) for plat, s in (('windows', _bw), ('linux', _bl))
+                    if s and isinstance(s.get('total'), int)]
+        if not _present:
+            return run_cell('builds')
+        _built = sum(int(s.get('built') or 0) for _, s in _present)
+        _failed = sum(int(s.get('failed') or 0) for _, s in _present)
+        _skipped = sum(int(s.get('skipped') or 0) for _, s in _present)
+        _total = sum(int(s.get('total') or 0) for _, s in _present)
+        if _total <= 0:
+            # A project with no build specifications: nothing to show.
+            return EMPTY_CELL
+        any_output['on'] = True
+        caps_ran.add('builds')
+        _ts = (pick_status('CI / Builds') or pick_status('CI / Builds (Linux)') or {}).get('created_at', '')
+        # Open the Builds report framed in the dashboard chrome (report-viewer),
+        # so it carries the shared header, a revision picker and a Rebuild button
+        # like the other report columns.
+        _url = viewer_url(f'{pages_url}/builds/{sha}/index.html', 'builds-report', sha, short)
+        _tip = (f'{_built} built, {_failed} failed'
+                + (f', {_skipped} skipped' if _skipped else '')
+                + f' of {_total} build specification(s)')
+        # Split pill: succeeded (green) / failed (red when > 0, muted grey at 0 so
+        # a clean run does not roll the row up to "failed").
+        _fail_kind = 'fail' if _failed > 0 else 'muted'
+        _chip_html = _chip_split([('pass', str(_built), 'Succeeded'),
+                                  (_fail_kind, str(_failed), 'Failed')], _url, _tip)
+        return (f'<td style="text-align:center" class="cidash-cap-cell" data-cap="builds" '
+                f'data-sha="{sha}" data-parent="{parent}" data-short="{short}" data-ts="{_ts}">'
+                f'{_chip_html}</td>')
+    builds_badge = builds_cell()
+
     # Small camera/image glyph beside the commit message whenever this revision
     # has any rendered VI snapshots, so snapshot coverage is discoverable straight
     # from the main table (tooltip per request). Coverage is cached, so reusing it
@@ -1110,6 +1415,7 @@ for c in commits_data:
       {snap_badge}
       {unit_badge}
       {antidoc_badge}
+      {builds_badge}
     </tr>""")
 
 rows = '\n'.join(rows_html)
@@ -1392,6 +1698,12 @@ run_dialog_css = (
     '.cidash-hist-specitem input{accent-color:var(--link);width:14px;height:14px;margin:0;flex:0 0 auto}'
     '.cidash-hist-specitem .sh{font-family:ui-monospace,Menlo,monospace;color:var(--fg-muted);flex:0 0 auto}'
     '.cidash-hist-specitem .ms{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)}'
+    '.cidash-hist-revfilter{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 10px}'
+    '.cidash-hist-search{flex:1 1 220px;min-width:150px;padding:7px 10px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-size:.85em;font-family:inherit}'
+    '.cidash-hist-inclchk{display:inline-flex;align-items:center;gap:6px;font-size:.82em;color:var(--fg-muted);cursor:pointer;white-space:nowrap}'
+    '.cidash-hist-inclchk input{accent-color:var(--link);width:14px;height:14px;margin:0}'
+    '.cidash-hist-specitem .cidash-hist-deptag{margin-left:auto;font-size:.7em;color:var(--fg-muted);border:1px solid var(--border);border-radius:4px;padding:0 5px;flex:0 0 auto}'
+    '.cidash-hist-specempty{color:var(--fg-muted);font-size:.84em;padding:8px}'
     # Intro line + the Activities header row (label on the left, quick-preset chips
     # on the right).
     '.cidash-hist-intro{margin:0 0 16px;color:var(--fg-muted);font-size:.86em;line-height:1.55}'
@@ -1552,6 +1864,16 @@ run_dialog = (r"""
     var qQueuePos = null, qQueueTotal = 0, qQueueAt = 0;
     function qLoad(){ try{ return JSON.parse(localStorage.getItem(QKEY)||"{}")||{}; }catch(e){ return {}; } }
     function qSave(o){ try{ localStorage.setItem(QKEY, JSON.stringify(o)); }catch(e){} }
+    function resultCell(c, sha){
+      // The cell carrying a re-runnable activity's result OR its in-flight run - both
+      // are valid targets to overlay an optimistic "Queued" spinner onto. A finished
+      // result is a cidash-cap-cell; a queued/running auto-run is a cidash-active-cell
+      // (tagged so the Populate-history dialog can re-run an in-flight activity). Matching
+      // both is what lets a re-run of an in-flight cell show its Queued badge, not just
+      // re-runs of finished ones (the latest revision's activity is usually still in flight).
+      return document.querySelector('td.cidash-cap-cell[data-cap="'+c+'"][data-sha="'+sha+'"]')
+          || document.querySelector('td.cidash-active-cell[data-cap="'+c+'"][data-sha="'+sha+'"]');
+    }
     function qPaint(td, c, sha){
       // Overlay the spinning "Queued" badge onto the cell, replacing its run glyph.
       // The badge is now a BUTTON (not a link): clicking it opens the manage dialog
@@ -1656,7 +1978,7 @@ run_dialog = (r"""
           // result cell and remember its original badge so a failed/cancelled dispatch
           // can restore it. Same bridge the report viewer's "Re-run" uses (see qSync),
           // now reachable from the Populate-history dialog's per-activity "Re-run".
-          var rc = document.querySelector('td.cidash-cap-cell[data-cap="'+c+'"][data-sha="'+sha+'"]');
+          var rc = resultCell(c, sha);
           if(rc){
             var oR = qLoad(); var kR = c+'|'+sha;
             if(oR[kR] && !oR[kR].orig){ oR[kR].orig = rc.innerHTML; qSave(oR); }
@@ -1885,7 +2207,7 @@ run_dialog = (r"""
         if(!e){ delete o[key]; changed = true; return; }
         var painted = document.querySelector('td.cidash-queued-cell[data-qcap="'+c+'"][data-qsha="'+sha+'"]');
         var a = document.querySelector('a.cidash-run[data-cap="'+c+'"][data-sha="'+sha+'"]');
-        var rc = document.querySelector('td.cidash-cap-cell[data-cap="'+c+'"][data-sha="'+sha+'"]');
+        var rc = resultCell(c, sha);
         if(e.failed){
           if(rc){
             var frts = Date.parse(rc.getAttribute('data-ts')||'') || 0;
@@ -2055,6 +2377,20 @@ run_dialog = (r"""
       }
       return out.join('');
     }
+    function qReportUrl(entry){
+      // A failed overlay that replaced a deployed RESULT cell stashed that cell's
+      // original chip HTML (entry.orig). If that chip linked to a deployed report
+      // (anything other than a bare GitHub Actions run page), hand it back so the
+      // failed dialog can route to the report - where a unit-test / analyzer failure
+      // is actually explained - instead of only the Actions log. A hard run failure
+      // that produced no report (no orig, or an Actions-only link) yields '' -> the
+      // dialog keeps just the "View run" (Actions) button.
+      var o = entry && entry.orig; if(!o) return '';
+      var m = /href="([^"]+)"/i.exec(o); if(!m) return '';
+      var u = m[1];
+      if(/github\.com\/[^"']*\/actions\//i.test(u)) return '';
+      return u;
+    }
     function renderQ(){
       var c = qState.cap, sha = qState.sha; if(!c) return;
       var o = qLoad(); var entry = o[c+'|'+sha]; var def = RT[c];
@@ -2069,14 +2405,20 @@ run_dialog = (r"""
       if(!failed && live.length>1 && pos){ h += '<p style="margin:0 0 12px;font-size:.85em">Place in queue: <strong>#'+pos+'</strong> <span style="color:var(--fg-muted)">of '+live.length+' queued from this browser (oldest first).</span></p>'; }
       h += '<div id="cidash-q-status" style="font-size:.82em;min-height:1.2em;margin:0 0 12px"></div>';
       h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">';
+      var repUrl = failed ? qReportUrl(entry) : '';
       h += qViewLinks(c, entry);
-      if(failed){ h += '<button class="cidash-btn cidash-ghost" id="cidash-q-dismiss">Dismiss</button>'; }
+      if(failed){
+        if(repUrl){ h += '<a class="cidash-btn" style="text-decoration:none" href="'+repUrl+'" target="_blank" rel="noopener">View report \u2197</a>'; }
+        h += '<button class="cidash-btn" id="cidash-q-rerun">Re-run</button>';
+        h += '<button class="cidash-btn cidash-ghost" id="cidash-q-dismiss">Dismiss</button>';
+      }
       else { h += '<button class="cidash-btn cidash-danger" id="cidash-q-cancel">\u2715 Cancel run</button>'; }
       h += '</div>';
-      if(failed){ h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0"><strong>View</strong> opens the failed run on GitHub to see what went wrong. <strong>Dismiss</strong> clears this badge so you can run it again from the dashboard.</p>'; }
+      if(failed){ h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0">'+(repUrl?'<strong>View report</strong> opens this activity\u2019s report to see what failed. ':'')+'<strong>View</strong> opens the failed run on GitHub to see what went wrong. <strong>Re-run</strong> starts it again for this commit. <strong>Dismiss</strong> clears this badge.</p>'; }
       else { h += '<p style="color:var(--fg-muted);font-size:.76em;margin:12px 0 0"><strong>Cancel run</strong> stops it on GitHub Actions (uses the same token you queued it with). <strong>View</strong> opens it on GitHub, where you can watch it or stop it manually.</p>'; }
       $("cidash-q-body").innerHTML = h;
       var cb=$("cidash-q-cancel"); if(cb) cb.addEventListener('click', function(){ cancelQueued(c, sha); });
+      var rb=$("cidash-q-rerun"); if(rb) rb.addEventListener('click', function(){ var rp=(entry.parent||''), rs=(entry.short||sha.slice(0,7)); qForget(c, sha); cidashQClose(); openRun(c, sha, rp, rs); });
       var db=$("cidash-q-dismiss"); if(db) db.addEventListener('click', function(){ qForget(c, sha); cidashQClose(); });
     }
     function openQ(c, sha){
@@ -2223,6 +2565,36 @@ run_dialog = (r"""
       if(has(422)) return { html:'GitHub rejected the dispatch (HTTP 422) \u2014 usually a bad branch ref (<code>'+esc(BRANCH)+'</code>) or inputs.', tok:false };
       var st=(fails[0]||{}).status; return { html:'Could not queue runs (HTTP '+esc(String(st||'?'))+'). <a href="https://github.com/'+REPO+'/actions" target="_blank" rel="noopener" style="color:var(--link)">View Actions \u2197</a>', tok:false };
     }
+    var QUEUE_CONFIRM_MAX = 10;   // confirm before firing more than this many runs at once
+    // Count how many workflow runs dispatchCells(cells, opts) will queue, WITHOUT
+    // dispatching -- so a large batch can be confirmed first. Mirrors the `total`
+    // computed inside dispatchCells (snapshots -> one backfill; each warm-container
+    // batch (cap,platform) group -> one dispatch; remaining per-revision platforms
+    // counted individually).
+    function dispatchTotal(cells, opts){
+      opts = opts || {}; var reuse = !!opts.reuse;
+      var sawSnap=false; var perRev=[];
+      (cells||[]).forEach(function(x){
+        if(x.cap==='snapshots'){ sawSnap=true; }
+        else if(!(x.cap==='vidiff' && !x.parent)){ perRev.push(x); }
+      });
+      var batchSeen={}; var batchGroups=0; var perRevPlats=0;
+      perRev.forEach(function(x){
+        cellPlatforms(x).forEach(function(plat){
+          var p=(RT[x.cap] && RT[x.cap].platforms) ? RT[x.cap].platforms[plat] : null;
+          if(reuse && p && p.batch){ var key=x.cap+'|'+plat; if(!batchSeen[key]){ batchSeen[key]=1; batchGroups++; } }
+          else { perRevPlats++; }
+        });
+      });
+      return perRevPlats + (sawSnap?1:0) + batchGroups;
+    }
+    // Ask before queuing a large batch (guards against accidentally firing a whole
+    // history from the Populate-history dialog). Returns false only when the user
+    // cancels a >QUEUE_CONFIRM_MAX batch; a native confirm() keeps it robust + modal.
+    function confirmLargeQueue(n){
+      if(n <= QUEUE_CONFIRM_MAX) return true;
+      return window.confirm('This will queue '+n+' workflow runs on '+REPO+'.\n\nThat can use a lot of GitHub Actions minutes. Queue all '+n+' now?');
+    }
     function dispatchCells(cells, statusFn, opts){
       opts = opts || {}; var reuse = !!opts.reuse;
       var perRev=[]; var snapShas=[]; var sawSnap=false; var snapForce=false;
@@ -2323,6 +2695,7 @@ run_dialog = (r"""
       if(!cells.length){ bfStatus('Nothing left to run \u2014 every revision is queued or already has results.', 'ok'); return; }
       if(!getTok()){ bfTokPanel(true); bfStatus('Add a token (Actions: Read and write) to queue runs.', 'warn'); var i=document.getElementById('lvci-bf-tok-input'); if(i) i.focus(); return; }
       bfTokPanel(false);
+      if(!confirmLargeQueue(dispatchTotal(cells))){ bfStatus('Cancelled \u2014 nothing was queued.', 'warn'); return; }
       var runBtn=document.getElementById('lvci-bf-run'); var disBtn=document.getElementById('lvci-bf-dismiss');
       if(runBtn) runBtn.disabled=true; if(disBtn) disBtn.disabled=true;
       dispatchCells(cells, bfStatus).then(function(res){
@@ -2368,11 +2741,12 @@ run_dialog = (r"""
       'masscompile': ['Mass Compile', 'Compiles the whole project, each revision'],
       'vi-analyzer': ['VI Analyzer',  'Runs the VI Analyzer suite, each revision'],
       'unit-tests':  ['Unit Tests',   'Runs the unit-test suite, each revision'],
-      'antidoc':     ['Antidoc',      'Generates project documentation, each revision']
+      'antidoc':     ['Antidoc',      'Generates project documentation, each revision'],
+      'builds':      ['Builds',       'Runs the project build specifications (EXE, PPL, ...), each revision']
     };
-    var CAP_ORDER = ['snapshots','snapshots2','vidiff','masscompile','vi-analyzer','unit-tests','antidoc'];
+    var CAP_ORDER = ['snapshots','snapshots2','vidiff','masscompile','vi-analyzer','unit-tests','antidoc','builds'];
     var DIFF_CAPS = { snapshots:1, snapshots2:1, vidiff:1 };  // the lean "diff-based" subset
-    var PLATFORM_CAPS = { snapshots2:1, vidiff:1, masscompile:1, 'vi-analyzer':1 };
+    var PLATFORM_CAPS = { snapshots2:1, vidiff:1, masscompile:1, 'vi-analyzer':1, builds:1 };
     var platState = {};                         // cap id -> selected platform keys for history rows
     function capPlatforms(capId){ return (RT[capId] && RT[capId].platforms) ? Object.keys(RT[capId].platforms) : []; }
     function histHasPlatformPicker(capId){ return !!PLATFORM_CAPS[capId] && capPlatforms(capId).length > 1; }
@@ -2405,7 +2779,7 @@ run_dialog = (r"""
       return CAP_ORDER.filter(function(c){ return (seen[c] || RAN[c]) && RT[c]; });
     }
     function histModal(){ return document.getElementById('cidash-hist-modal'); }
-    function cidashHistClose(){ var m=histModal(); if(m) m.style.display='none'; document.body.style.overflow=''; }
+    function cidashHistClose(){ var m=histModal(); if(m) m.style.display='none'; document.body.style.overflow=''; try{ if(window.parent!==window) window.parent.postMessage('lvci:hist-close',location.origin); }catch(e){} }
     function histStatus(html, kind){
       var s=document.getElementById('cidash-hist-status'); if(!s) return;
       var col = kind==='ok' ? '#3fb950' : (kind==='err' ? '#f85149' : (kind==='warn' ? '#d29922' : 'var(--fg-muted)'));
@@ -2495,6 +2869,20 @@ run_dialog = (r"""
           out.push({ cap:td.getAttribute('data-cap'), sha:td.getAttribute('data-sha'),
                      parent:td.getAttribute('data-parent')||'', order:idx, done:true });
         });
+        // A client-side optimistic overlay (Queued / Running / Failed) can REPLACE an
+        // empty run glyph, leaving the cell with ONLY data-qcap/data-qsha (the run's
+        // <a> - and thus the cap/sha this dialog keys off - is gone). Gather those too
+        // so a cell whose only state is an in-browser overlay (e.g. a unit-test run that
+        // FAILED) stays re-runnable here instead of vanishing as "none in scope". A
+        // cap-cell/active-cell that ALSO carries an overlay is already counted above, so
+        // skip it to avoid double-counting; parent is recovered from the stored entry.
+        Array.prototype.forEach.call(tr.querySelectorAll('td.cidash-queued-cell[data-qcap]'), function(td){
+          if(td.classList.contains('cidash-cap-cell') || td.classList.contains('cidash-active-cell')) return;
+          var qc=td.getAttribute('data-qcap'), qs=td.getAttribute('data-qsha');
+          if(!qc || !qs) return;
+          var qe=(qLoad()[qc+'|'+qs])||{};
+          out.push({ cap:qc, sha:qs, parent:qe.parent||'', order:idx, done:true });
+        });
       });
       if(RT.snapshots2){
         HIST.forEach(function(r, idx){
@@ -2508,10 +2896,24 @@ run_dialog = (r"""
       return out;
     }
     function histScopeMode(){ var r=document.querySelector('input[name="cidash-hist-scope"]:checked'); return r ? r.value : 'all'; }
-    function histIdx(sha){ for(var i=0;i<HIST.length;i++){ if(HIST[i].sha===sha) return i; } return -1; }
+    // The revision pickers mirror the dashboard table: dependency-only revisions
+    // (only a .vipc/.vip changed) are hidden unless "Show dependency-only" is on,
+    // and a free-text search narrows by short SHA or commit title. histVisible() is
+    // the newest-first set every scope (all / range / specific) actually operates on.
+    var histSearch = '';
+    var histInclDep = false;
+    function histMatchSearch(r){
+      if(!histSearch) return true;
+      var q=histSearch.toLowerCase();
+      return (String(r.short||'').toLowerCase().indexOf(q)>=0)
+          || (String(r.sha||'').toLowerCase().indexOf(q)>=0)
+          || (String(r.msg||'').toLowerCase().indexOf(q)>=0);
+    }
+    function histVisible(){ return HIST.filter(function(r){ return (histInclDep || !r.dep_only) && histMatchSearch(r); }); }
+    function histIdxIn(list, sha){ for(var i=0;i<list.length;i++){ if(list[i].sha===sha) return i; } return -1; }
     function histIncludedShas(){
-      // Three scopes drive which revisions are queued (HIST is newest-first):
-      //   all      -> every revision
+      // Three scopes drive which revisions are queued (visible set is newest-first):
+      //   all      -> every visible revision
       //   range    -> Start (older bound) .. Stop (newer bound), inclusive; a blank
       //               Start = oldest and a blank Stop = newest, and a reversed pair
       //               is swapped so the range is always valid
@@ -2521,17 +2923,45 @@ run_dialog = (r"""
         Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec:checked'), function(b){ inc[b.value]=1; });
         return inc;
       }
+      var vis=histVisible();
       if(mode==='range'){
         var f=document.getElementById('cidash-hist-from'); var t=document.getElementById('cidash-hist-to');
-        var iFrom = (f && f.value) ? histIdx(f.value) : HIST.length-1;   // '' = oldest
-        var iTo   = (t && t.value) ? histIdx(t.value) : 0;               // '' = newest
-        if(iFrom<0) iFrom=HIST.length-1; if(iTo<0) iTo=0;
+        var iFrom = (f && f.value) ? histIdxIn(vis, f.value) : vis.length-1;   // '' = oldest
+        var iTo   = (t && t.value) ? histIdxIn(vis, t.value) : 0;              // '' = newest
+        if(iFrom<0) iFrom=vis.length-1; if(iTo<0) iTo=0;
         var lo=Math.min(iFrom,iTo), hi=Math.max(iFrom,iTo);
-        for(var j=lo;j<=hi;j++){ if(HIST[j]) inc[HIST[j].sha]=1; }
+        for(var j=lo;j<=hi;j++){ if(vis[j]) inc[vis[j].sha]=1; }
         return inc;
       }
-      HIST.forEach(function(r){ inc[r.sha]=1; });
+      vis.forEach(function(r){ inc[r.sha]=1; });
       return inc;
+    }
+    function histRenderRevList(){
+      // (Re)build the "All" count, the range dropdowns and the specific checklist
+      // from histVisible(), preserving current selections where the revision is
+      // still visible. Called on open and whenever the search / dep toggle changes.
+      var vis=histVisible();
+      var ac=document.getElementById('cidash-hist-allcount');
+      if(ac) ac.textContent='All '+vis.length+' revision'+(vis.length===1?'':'s');
+      var optsHtml=vis.map(function(r){ return '<option value="'+esc(r.sha)+'">'+esc((r.short||'')+(r.msg?(' \u2014 '+r.msg):''))+'</option>'; }).join('');
+      ['cidash-hist-from','cidash-hist-to'].forEach(function(id){
+        var sel=document.getElementById(id); if(!sel) return;
+        var prev=sel.value;
+        var head=(id==='cidash-hist-from')?'<option value="">Oldest (beginning)</option>':'<option value="">Newest (latest)</option>';
+        sel.innerHTML=head+optsHtml;
+        sel.value=(prev && vis.some(function(r){return r.sha===prev;}))?prev:'';
+      });
+      var checked={};
+      Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec:checked'), function(b){ checked[b.value]=1; });
+      var host=document.getElementById('cidash-hist-speclist'); if(!host) return;
+      if(!vis.length){ host.innerHTML='<div class="cidash-hist-specempty">No revisions match.</div>'; return; }
+      host.innerHTML=vis.map(function(r){
+        return '<label class="cidash-hist-specitem"><input type="checkbox" class="cidash-hist-spec" value="'+esc(r.sha)+'"'+(checked[r.sha]?' checked':'')+'>'
+          + '<span class="sh">'+esc(r.short||'')+'</span><span class="ms">'+esc(r.msg||'')+'</span>'
+          + (r.dep_only?'<span class="cidash-hist-deptag" title="Only an external dependency (.vipc/.vip) changed in this revision">dep</span>':'')
+          + '</label>';
+      }).join('');
+      Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.addEventListener('change', histRefresh); });
     }
     function histScopeApply(){
       // Reveal only the sub-control for the chosen scope.
@@ -2679,20 +3109,23 @@ run_dialog = (r"""
       var body=document.getElementById('cidash-hist-body'); if(!body) return;
       var h='';
       h += '<p class="cidash-hist-intro">Queue CI for revisions that already exist so the dashboard fills in. Runs <strong>oldest \u2192 newest</strong>. For each activity, choose to <b>Fill</b> only the missing results or <b>Re-run</b> every selected revision.</p>';
-      var optsHtml = HIST.map(function(r){ return '<option value="'+esc(r.sha)+'">'+esc((r.short||'')+(r.msg?(' \u2014 '+r.msg):''))+'</option>'; }).join('');
-      h += '<div class="cidash-hist-sec"><label class="cidash-hist-lbl">Which revisions</label><div class="cidash-hist-scope">';
-      h += '<label class="cidash-hist-radio"><input type="radio" name="cidash-hist-scope" value="all" checked> All '+HIST.length+' revision'+(HIST.length===1?'':'s')+' <span class="sub">\u2014 the full history</span></label>';
+      var anyDep = HIST.some(function(r){ return r.dep_only; });
+      h += '<div class="cidash-hist-sec"><label class="cidash-hist-lbl">Which revisions</label>';
+      h += '<div class="cidash-hist-revfilter"><input type="text" id="cidash-hist-revsearch" class="cidash-hist-search" placeholder="Search by title or SHA\u2026" autocomplete="off" spellcheck="false" value="'+esc(histSearch)+'">';
+      if(anyDep) h += '<label class="cidash-hist-inclchk" title="Revisions whose only change is an external dependency (.vipc/.vip). Hidden by default, matching the dashboard."><input type="checkbox" id="cidash-hist-incldep"'+(histInclDep?' checked':'')+'> Show dependency-only revisions</label>';
+      h += '</div>';
+      h += '<div class="cidash-hist-scope">';
+      h += '<label class="cidash-hist-radio"><input type="radio" name="cidash-hist-scope" value="all" checked> <span id="cidash-hist-allcount">All revisions</span> <span class="sub">\u2014 the full history</span></label>';
       h += '<label class="cidash-hist-radio"><input type="radio" name="cidash-hist-scope" value="range"> A range of history</label>';
       h += '<div class="cidash-hist-rangerow" id="cidash-hist-rangerow" style="display:none">';
-      h += '<label>Start at <select id="cidash-hist-from"><option value="">Oldest (beginning)</option>'+optsHtml+'</select></label>';
-      h += '<label>stop at <select id="cidash-hist-to"><option value="">Newest (latest)</option>'+optsHtml+'</select></label>';
+      h += '<label>Start at <select id="cidash-hist-from"></select></label>';
+      h += '<label>stop at <select id="cidash-hist-to"></select></label>';
       h += '</div>';
       h += '<label class="cidash-hist-radio"><input type="radio" name="cidash-hist-scope" value="specific"> Specific revision(s)</label>';
       h += '<div id="cidash-hist-specwrap" style="display:none">';
       h += '<div class="cidash-hist-spectools"><a href="#" id="cidash-hist-spec-all">Select all</a><a href="#" id="cidash-hist-spec-none">Clear</a></div>';
-      h += '<div class="cidash-hist-speclist" id="cidash-hist-speclist">';
-      HIST.forEach(function(r){ h += '<label class="cidash-hist-specitem"><input type="checkbox" class="cidash-hist-spec" value="'+esc(r.sha)+'"><span class="sh">'+esc(r.short||'')+'</span><span class="ms">'+esc(r.msg||'')+'</span></label>'; });
-      h += '</div></div>';
+      h += '<div class="cidash-hist-speclist" id="cidash-hist-speclist"></div>';
+      h += '</div>';
       h += '</div></div>';
       var instCaps=histInstalledCaps();
       h += '<div class="cidash-hist-sec"><div class="cidash-hist-actshead"><label class="cidash-hist-lbl" style="margin:0">Activities</label>';
@@ -2748,6 +3181,13 @@ run_dialog = (r"""
       h += '<button class="cidash-btn cidash-go" id="cidash-hist-go">\u25B6 Queue runs</button>';
       h += '<button class="cidash-btn cidash-ghost" id="cidash-hist-cancel">Cancel</button></div>';
       body.innerHTML=h;
+      // Mirror the dashboard's current dependency-only filter so the dialog shows
+      // the same revisions the table does; populate the pickers from the visible set.
+      var _dd=document.getElementById('show-deponly'); histInclDep=!!(_dd && _dd.checked);
+      var _idp=document.getElementById('cidash-hist-incldep'); if(_idp) _idp.checked=histInclDep;
+      histRenderRevList();
+      var _rs=document.getElementById('cidash-hist-revsearch'); if(_rs) _rs.addEventListener('input', function(){ histSearch=_rs.value.trim(); histRenderRevList(); histRefresh(); });
+      if(_idp) _idp.addEventListener('change', function(){ histInclDep=!!_idp.checked; histRenderRevList(); histRefresh(); });
       instCaps.forEach(function(cap){ actMode[cap]='fill'; });   // open with every activity on Fill (gaps only)
       reuseWarm=false;   // warm-container reuse always starts OFF
       var rchk=document.getElementById('cidash-hist-reuse'); if(rchk) rchk.addEventListener('change', function(){ reuseWarm=!!rchk.checked; histRefresh(); });
@@ -2763,7 +3203,6 @@ run_dialog = (r"""
       Array.prototype.forEach.call(document.querySelectorAll('input[name="cidash-hist-scope"]'), function(r){ r.addEventListener('change', function(){ histScopeApply(); histRefresh(); }); });
       var hf=document.getElementById('cidash-hist-from'); if(hf) hf.addEventListener('change', histRefresh);
       var ht=document.getElementById('cidash-hist-to'); if(ht) ht.addEventListener('change', histRefresh);
-      Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.addEventListener('change', histRefresh); });
       var spa=document.getElementById('cidash-hist-spec-all'); if(spa) spa.addEventListener('click', function(e){ e.preventDefault(); Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.checked=true; }); histRefresh(); });
       var spn=document.getElementById('cidash-hist-spec-none'); if(spn) spn.addEventListener('click', function(e){ e.preventDefault(); Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.checked=false; }); histRefresh(); });
       var go=document.getElementById('cidash-hist-go'); if(go) go.addEventListener('click', histRun);
@@ -2785,7 +3224,7 @@ run_dialog = (r"""
       // platform-split - limit to the document's platform. Falls back silently to
       // the normal full dialog when the revision/activity isn't on this dashboard.
       try{
-        if(opts.sha && histIdx(opts.sha)>=0){
+        if(opts.sha && histIdxIn(HIST, opts.sha)>=0){
           var sp=document.querySelector('input[name="cidash-hist-scope"][value="specific"]'); if(sp){ sp.checked=true; histScopeApply(); }
           Array.prototype.forEach.call(document.querySelectorAll('input.cidash-hist-spec'), function(b){ b.checked=(b.value===opts.sha); });
         }
@@ -2804,6 +3243,7 @@ run_dialog = (r"""
       if(!cells.length){ histStatus('Nothing to queue \u2014 the selected revisions already have results for those activities.', 'warn'); return; }
       if(!getTok()){ histTokPanel(true); histStatus('Add a token (Actions: Read and write) to queue runs.', 'warn'); var i=document.getElementById('cidash-hist-tok-input'); if(i) i.focus(); return; }
       histTokPanel(false);
+      if(!confirmLargeQueue(dispatchTotal(cells, {reuse: reuseWarm}))){ histStatus('Cancelled \u2014 nothing was queued.', 'warn'); return; }
       var go=document.getElementById('cidash-hist-go'); var cancel=document.getElementById('cidash-hist-cancel');
       if(go) go.disabled=true; if(cancel) cancel.disabled=true;
       dispatchCells(cells, histStatus, {reuse: reuseWarm}).then(function(res){
@@ -2830,6 +3270,23 @@ run_dialog = (r"""
     }
     // Exposed for the shared header's "Populate history" menu item.
     window.lvciRunHistory = histOpen;
+    // When the dialog is opened inside an overlay iframe from a report page's
+    // "Re-run" (host requests ?lvci-embed=1), show ONLY the dialog: hide the
+    // dashboard header/table and make the page transparent, so the iframe reads
+    // as a plain modal over the dimmed host page, not the whole dashboard behind it.
+    function lvciEmbedMode(){
+      try{
+        var d=document.documentElement; if(d.classList.contains('lvci-embed')) return; d.classList.add('lvci-embed');
+        var st=document.createElement('style');
+        st.textContent='html.lvci-embed,html.lvci-embed body{background:transparent!important}'
+          +'html.lvci-embed body>*:not(#cidash-hist-modal){display:none!important}'
+          +'html.lvci-embed #cidash-hist-modal{background:rgba(0,0,0,.55)!important}';
+        (document.head||document.documentElement).appendChild(st);
+      }catch(e){}
+    }
+    // Apply embed hiding synchronously - this script runs while the page is still
+    // parsing (before <main>/the table below), so the chrome is never painted.
+    try{ if(new URLSearchParams(location.search||'').get('lvci-embed')==='1') lvciEmbedMode(); }catch(e){}
     // Exposed because the modal's "× Close" button and backdrop use inline onclick
     // handlers, which resolve against window — not this IIFE's scope. Without this
     // the close button silently did nothing (the Cancel button and Esc, which call
@@ -2848,9 +3305,11 @@ run_dialog = (r"""
       try{
         var p=new URLSearchParams(location.search||'');
         if(p.get('lvci-populate')!=='1') return;
+        var embed=(p.get('lvci-embed')==='1');
         var opts={ cap:(p.get('cap')||''), sha:(p.get('sha')||''), platform:(p.get('platform')||'') };
-        try{ ['lvci-populate','cap','sha','platform'].forEach(function(k){ p.delete(k); });
+        try{ ['lvci-populate','lvci-embed','cap','sha','platform'].forEach(function(k){ p.delete(k); });
              var qs=p.toString(); history.replaceState(null,'',location.pathname+(qs?('?'+qs):'')+location.hash); }catch(e){}
+        if(embed) lvciEmbedMode();
         histOpen((opts.cap||opts.sha)?opts:undefined);
       }catch(e){}
     }
@@ -2867,6 +3326,208 @@ run_dialog = (r"""
     window.addEventListener('focus', qRecheck);
   })();
   </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__RUN_TIMING__', run_timing_json).replace('__HIST__', hist_json).replace('__CAPS_RAN__', caps_ran_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
+
+# ── Debug Run dialog ─────────────────────────────────────────────────────────
+# Tools > Debug Run. A three-step flow (choose target -> connect -> hand off):
+#   1. Pick the worker (Linux for now), the revision, which activities to run on
+#      the go signal, and a session length; dispatch debug-session.yml.
+#   2. Poll for the published connect info and open the browser noVNC desktop.
+#   3. Tell the user to log into LabVIEW then press ENTER in the on-screen prompt
+#      to run the selected activities; offer "End session" (cancels the run).
+# Self-contained modal + controller, exposed as window.lvciDebugRun. Reuses the
+# same dispatch token (lvci_dispatch_token / lvci_install_token) as every other
+# dispatch on the dashboard.
+debug_dialog = (r"""
+  <div id="cidash-debug-modal" onclick="if(event.target===this)cidashDebugClose()" style="display:none;position:fixed;inset:0;z-index:320;background:rgba(0,0,0,.55)">
+    <div role="dialog" aria-modal="true" aria-labelledby="cidash-debug-title" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(600px,calc(100% - 32px));max-height:calc(100% - 48px);overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 48px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <strong id="cidash-debug-title" style="font-size:.95em">Debug Run</strong>
+        <button onclick="cidashDebugClose()" style="background:transparent;border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:.82em">&#10005; Close</button>
+      </div>
+      <div id="cidash-debug-body" style="padding:16px"></div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var RT = __RUN_TARGETS__;
+    var HIST = __HIST__;
+    var REPO = "__REPO__";
+    var BRANCH = "__BRANCH__";
+    var TOK_KEY = "lvci_dispatch_token";
+    var WF = "debug-session.yml";
+    var CAP_LABEL = { masscompile:'Mass Compile', vidiff:'VIDiff', snapshots2:'VI Browser 2.0 Snapshots', builds:'Builds' };
+    function $(id){ return document.getElementById(id); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function getTok(){ try{ return localStorage.getItem(TOK_KEY)||localStorage.getItem("lvci_install_token")||''; }catch(e){ return ''; } }
+    function setTok(v){ try{ localStorage.setItem(TOK_KEY, v); }catch(e){} }
+    function ghHeaders(){ return { 'Authorization':'Bearer '+getTok(), 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' }; }
+    function pagesBase(){ var u=(window.LVCI&&window.LVCI.pagesUrl)||''; if(u&&u.charAt(u.length-1)!=='/') u+='/'; return u; }
+    function tokenSetupUrl(){
+      var owner=(REPO.split('/')[0])||'';
+      return 'https://github.com/settings/personal-access-tokens/new?name='+encodeURIComponent('LabVIEW CI dispatch')
+        +'&description='+encodeURIComponent('Queue LabVIEW CI runs for '+REPO)
+        +(owner?'&target_name='+encodeURIComponent(owner):'')+'&actions=write';
+    }
+    // Existing debug sessions (any in-progress debug-session run), shown below the
+    // start form: reconnect (Open) or End from ANY device, with a live progress
+    // indicator for ones still queued or booting.
+    var liveTimer = null, liveIds = '';
+    function clearLiveTimer(){ if(liveTimer){ clearInterval(liveTimer); liveTimer=null; } }
+    function ensureLiveCss(){
+      if(document.getElementById('dbg-live-css')) return;
+      var st=document.createElement('style'); st.id='dbg-live-css';
+      st.textContent='.dbg-bar{height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin:6px 0}'
+        +'.dbg-bar>span{display:block;height:100%;width:0;background:#1f6feb;border-radius:4px;transition:width .4s}'
+        +'.dbg-bar.dbg-ok>span{background:#2ea043}'
+        +'.dbg-bar.dbg-indet>span{width:35%;animation:dbgSlide 1.15s ease-in-out infinite}'
+        +'@keyframes dbgSlide{0%{margin-left:-35%}100%{margin-left:100%}}';
+      (document.head||document.documentElement).appendChild(st);
+    }
+    function endRun(runId){
+      if(!runId) return;
+      if(!window.confirm('End debug session run #'+runId+'? This cancels the run and tears down the container.')) return;
+      fetch('https://api.github.com/repos/'+REPO+'/actions/runs/'+runId+'/cancel', { method:'POST', headers:ghHeaders() })
+        .then(function(){ setTimeout(refreshLiveSessions, 1500); }).catch(function(){});
+    }
+    function livePlat(r){ var m=/\((windows|linux)\)/i.exec(r.display_title||r.name||''); return m?m[1].toLowerCase():''; }
+    function liveRow(r){
+      var sh=(r.head_sha||'').slice(0,7); var plat=livePlat(r);
+      return '<div class="dbg-live-row" style="padding:8px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+        +   '<span style="font-size:.85em"><a href="'+esc(r.html_url)+'" target="_blank" rel="noopener">run #'+r.id+' &#8599;</a> &middot; <code>'+esc(sh)+'</code>'+(plat?(' &middot; '+esc(plat)):'')+'</span>'
+        +   '<span id="dbg-live-open-'+r.id+'" style="margin-left:auto"></span>'
+        +   '<button class="dbg-live-end" data-run="'+r.id+'" style="background:transparent;border:1px solid #f85149;color:#f85149;padding:3px 10px;border-radius:6px;cursor:pointer;font-size:.8em">End</button>'
+        + '</div>'
+        + '<div class="dbg-bar dbg-indet" id="dbg-live-bar-'+r.id+'"><span></span></div>'
+        + '<div id="dbg-live-stat-'+r.id+'" style="font-size:.78em;color:var(--fg-muted)">Checking status&hellip;</div>'
+        + '</div>';
+    }
+    function setLiveBar(id, mode, pct){
+      var el=$('dbg-live-bar-'+id); if(!el) return;
+      el.className='dbg-bar'+(mode==='indet'?' dbg-indet':(mode==='ok'?' dbg-ok':''));
+      var sp=el.firstChild; if(!sp) return;
+      if(mode==='indet'){ sp.style.width=''; } else { sp.style.width=(pct==null?0:Math.max(4,Math.min(100,pct)))+'%'; }
+    }
+    function setLiveStat(id, html){ var el=$('dbg-live-stat-'+id); if(el) el.innerHTML=html; }
+    function setLiveOpen(id, url){ var el=$('dbg-live-open-'+id); if(el) el.innerHTML='<a href="'+esc(url)+'" target="_blank" rel="noopener" style="display:inline-block;background:#2ea043;border:1px solid #2ea043;color:#fff;padding:4px 12px;border-radius:6px;text-decoration:none;font-size:.82em">Open remote desktop &#8599;</a>'; }
+    function fillLiveRow(r){
+      // Live? the connect file is published once the tunnel is up.
+      fetch(pagesBase()+'debug/'+r.id+'.json?_='+Date.now(), { cache:'no-cache' })
+        .then(function(x){ return x.ok?x.json():null; })
+        .then(function(j){
+          if(j&&j.url){ setLiveOpen(r.id, j.url); setLiveBar(r.id,'ok',100); setLiveStat(r.id,'<span style="color:#3fb950">Live &mdash; remote desktop ready.</span>'); return; }
+          if(r.status==='queued'||r.status==='pending'){ setLiveBar(r.id,'indet'); setLiveStat(r.id,'Queued &mdash; waiting for a runner or another debug session to finish.'); return; }
+          fetch('https://api.github.com/repos/'+REPO+'/actions/runs/'+r.id+'/jobs?per_page=5', { headers:ghHeaders(), cache:'no-cache' })
+            .then(function(x){ return x.ok?x.json():null; })
+            .then(function(d){
+              var jobs=((d&&d.jobs)||[]);
+              var total=0, done=0, cur='';
+              jobs.forEach(function(j){ (j.steps||[]).forEach(function(s){ total++; if(s.status==='completed') done++; else if(s.status==='in_progress'&&!cur) cur=s.name; }); });
+              if(total){ setLiveBar(r.id,'', Math.round(done/total*100)); setLiveStat(r.id,'Booting &mdash; '+esc(cur||'working')+' ('+done+'/'+total+')'); }
+              else { setLiveBar(r.id,'indet'); setLiveStat(r.id,'Booting the container + LabVIEW&hellip;'); }
+            }).catch(function(){ setLiveBar(r.id,'indet'); setLiveStat(r.id,'Booting&hellip;'); });
+        }).catch(function(){ setLiveBar(r.id,'indet'); setLiveStat(r.id,'Checking status&hellip;'); });
+    }
+    function refreshLiveSessions(){
+      var box=$('dbg-live'); if(!box) return;
+      if(!getTok()){ box.innerHTML=''; liveIds=''; return; }
+      fetch('https://api.github.com/repos/'+REPO+'/actions/workflows/'+encodeURIComponent(WF)+'/runs?per_page=20', { headers:ghHeaders(), cache:'no-cache' })
+        .then(function(r){ return r.ok?r.json():null; })
+        .then(function(d){
+          var box=$('dbg-live'); if(!box) return;
+          var runs=((d&&d.workflow_runs)||[]).filter(function(r){ return r.status!=='completed'; });
+          var hdr='<div style="font-weight:600;font-size:.88em;margin:0 0 4px">Existing debug sessions</div>';
+          if(!runs.length){ box.innerHTML=hdr+'<div style="font-size:.8em;color:var(--fg-muted)">None running. Started sessions run on the runner (independent of this browser) and appear here.</div>'; liveIds=''; return; }
+          var ids=runs.map(function(r){ return r.id; }).join(',');
+          if(ids!==liveIds){
+            ensureLiveCss();
+            box.innerHTML=hdr
+              + '<div style="font-size:.78em;color:var(--fg-muted);margin:0 0 6px">Reconnect (Open) or end any session from here &mdash; on any device.</div>'
+              + runs.map(liveRow).join('');
+            liveIds=ids;
+            var ends=box.querySelectorAll('.dbg-live-end');
+            for(var i=0;i<ends.length;i++){ ends[i].addEventListener('click', function(){ endRun(this.getAttribute('data-run')); }); }
+          }
+          runs.forEach(fillLiveRow);
+        }).catch(function(){});
+    }
+    // Quickly surface a just-dispatched run in the list (before the 5s poll settles).
+    function kickLive(){ refreshLiveSessions(); setTimeout(refreshLiveSessions,1500); setTimeout(refreshLiveSessions,4000); setTimeout(refreshLiveSessions,8000); }
+    function modal(){ return $('cidash-debug-modal'); }
+    function cidashDebugClose(){ clearLiveTimer(); var m=modal(); if(m) m.style.display='none'; document.body.style.overflow=''; }
+    window.cidashDebugClose = cidashDebugClose;
+    function debugStatus(html, kind){
+      var s=$('dbg-status'); if(!s) return;
+      var col = kind==='ok' ? '#3fb950' : (kind==='err' ? '#f85149' : (kind==='warn' ? '#d29922' : 'var(--fg-muted)'));
+      s.style.color=col; s.innerHTML=html||'';
+    }
+    // ── Config form + existing-sessions list ───────────────────────────
+    function renderStep1(){
+      var revs=HIST.slice(0,200).map(function(r){ return '<option value="'+esc(r.sha)+'">'+esc(r.short||r.sha.slice(0,7))+' &mdash; '+esc((r.msg||'').slice(0,60))+'</option>'; }).join('');
+      var body=''
+        + '<p style="margin:0 0 10px;color:var(--fg-muted);font-size:.9em">Start an interactive LabVIEW desktop on a worker container for a specific revision, then remote in. The project opens automatically and an on-screen menu lets you run CI operations (Mass Compile, Builds, VIDiff&hellip;) and watch them execute live.</p>'
+        + '<div style="margin:0 0 12px;padding:8px 10px;border:1px solid var(--border);border-left:3px solid #d29922;border-radius:6px;background:rgba(210,153,34,.08);font-size:.85em;color:var(--fg)">Each debug session occupies one of this project\'s Actions runners for its whole lifetime and will block other CI jobs if no runner slots are free. End sessions as soon as you are done.</div>'
+        + '<div style="margin:0 0 12px"><label style="font-weight:600;font-size:.85em" for="dbg-rev">Revision</label><br>'
+        +   '<select id="dbg-rev" style="width:100%;max-width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)">'+revs+'</select></div>'
+        + '<div style="margin:0 0 14px"><label style="font-weight:600;font-size:.85em" for="dbg-min">Auto-end after</label><br>'
+        +   '<select id="dbg-min" style="padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)">'
+        +     '<option value="30">30 minutes</option><option value="45" selected>45 minutes</option><option value="60">60 minutes</option><option value="90">90 minutes</option><option value="120">120 minutes</option></select></div>'
+        + (getTok()?'':'<div style="margin:0 0 12px"><label style="font-weight:600;font-size:.85em" for="dbg-tok">Dispatch token</label><br><input id="dbg-tok" type="password" placeholder="fine-grained PAT with Actions: write" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg)"><div style="font-size:.8em;color:var(--fg-muted);margin-top:3px"><a href="'+tokenSetupUrl()+'" target="_blank" rel="noopener">Create one &#8599;</a></div></div>')
+        + '<div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap"><button id="dbg-start" title="Boot a LabVIEW debug desktop on this revision; pick operations from the on-screen menu once inside" style="background:#1f6feb;border:1px solid #1f6feb;color:#fff;padding:7px 16px;border-radius:6px;cursor:pointer;font-size:.9em">Start debug session</button><span id="dbg-status" style="font-size:.85em;color:var(--fg-muted)"></span></div>'
+        + '<div id="dbg-live" style="margin:16px 0 0;border-top:1px solid var(--border);padding-top:12px;max-height:280px;overflow-y:auto"></div>';
+      $('cidash-debug-body').innerHTML=body;
+      try{ if(typeof window.lvciRevPicker==='function') window.lvciRevPicker($('dbg-rev')); }catch(e){}
+      $('dbg-start').addEventListener('click', function(){ startSession(); });
+      refreshLiveSessions();
+      clearLiveTimer(); liveTimer=setInterval(refreshLiveSessions, 5000);
+    }
+    // Dispatch a debug session: boot a LabVIEW desktop on the chosen revision
+    // with the project open; operations are chosen from the on-screen menu.
+    function startSession(){
+      var t=$('dbg-tok'); if(t && t.value.trim()){ setTok(t.value.trim()); }
+      if(!getTok()){ debugStatus('Enter a token with <strong>Actions: write</strong> to start.', 'err'); return; }
+      var sha=$('dbg-rev') ? $('dbg-rev').value : '';
+      if(!sha){ debugStatus('Pick a revision.', 'err'); return; }
+      var mins=$('dbg-min') ? $('dbg-min').value : '45';
+      var startBtn=$('dbg-start');
+      if(startBtn){ startBtn.disabled=true; startBtn.textContent='Starting...'; }
+      debugStatus('Dispatching the debug session...');
+      function reset(){ if(startBtn){ startBtn.disabled=false; startBtn.textContent='Start debug session'; } }
+      var inputs={ commit_sha:sha, platform:'linux', actions:'', minutes:String(mins), open_source:'true' };
+      fetch('https://api.github.com/repos/'+REPO+'/actions/workflows/'+encodeURIComponent(WF)+'/dispatches', {
+        method:'POST', headers:Object.assign({'Content-Type':'application/json'}, ghHeaders()),
+        body:JSON.stringify({ ref:BRANCH, inputs:inputs })
+      }).then(function(r){
+        reset();
+        if(r.status===204){ debugStatus('Session dispatched &mdash; it will appear below as it boots.', 'ok'); kickLive(); return; }
+        if(r.status===401){ try{ localStorage.removeItem(TOK_KEY); }catch(e){} debugStatus('Token rejected (401). Paste a valid token above.', 'err'); renderStep1(); return; }
+        if(r.status===403){ debugStatus('Dispatch forbidden (403). The token needs <strong>Actions: write</strong> for <code>'+esc(REPO)+'</code>.', 'err'); return; }
+        if(r.status===404){ debugStatus('Not found (404). <code>'+esc(WF)+'</code> is not installed, or the token cannot see this repo.', 'err'); return; }
+        debugStatus('Dispatch failed (HTTP '+r.status+').', 'err');
+      }).catch(function(e){ reset(); debugStatus('Network error: '+esc(String(e&&e.message||e)), 'err'); });
+    }
+    // ── Open ───────────────────────────────────────────────────────────────
+    function debugOpen(){
+      var m=modal(); if(!m) return;
+      m.style.display='block'; document.body.style.overflow='hidden';
+      renderStep1();
+    }
+    window.lvciDebugRun = debugOpen;
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ var m=modal(); if(m && m.style.display==='block') cidashDebugClose(); } });
+    // Auto-open when another page routed here for Debug Run (?lvci-debug=1); strip
+    // the param so a manual reload doesn't reopen it.
+    function lvciAutoDebug(){
+      try{
+        var p=new URLSearchParams(location.search||'');
+        if(p.get('lvci-debug')!=='1') return;
+        p.delete('lvci-debug');
+        try{ var qs=p.toString(); history.replaceState(null,'',location.pathname+(qs?('?'+qs):'')+location.hash); }catch(e){}
+        debugOpen();
+      }catch(e){}
+    }
+    if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', lvciAutoDebug); } else { lvciAutoDebug(); }
+  })();
+  </scr""" + """ipt>""").replace('__RUN_TARGETS__', run_targets_json).replace('__HIST__', hist_json).replace('__REPO__', repo).replace('__BRANCH__', get_default_branch())
 
 # ── "Run CI for your whole history" card (fresh installs only) ───────────────
 # A brand-new dashboard has no results, so every project cell shows a one-click
@@ -3027,11 +3688,41 @@ html = f"""<!DOCTYPE html>
     .cidash-chip.cc-fail{{background:rgba(248,81,73,.16);color:#f85149;border-color:rgba(248,81,73,.4)}}
     .cidash-chip.cc-warn{{background:rgba(210,153,34,.16);color:#d29922;border-color:rgba(210,153,34,.35)}}
     .cidash-chip.cc-info{{background:rgba(56,139,253,.16);color:#58a6ff;border-color:rgba(56,139,253,.3)}}
+    /* Solid pill: a hard failure (e.g. a Mass Compile run LabVIEW could not
+       complete) fills the pill with a bright, saturated red so it stands out
+       from a merely low percentage (which stays a subtly-tinted red). */
+    .cidash-chip.cc-fail.cc-solid{{background:#da3633;color:#fff;border-color:#da3633}}
+    .cidash-chip.cc-fail.cc-solid svg{{color:#fff}}
+    /* Split pill: a neutral container whose individual values colour themselves
+       (used when one cell reports two values that can differ in state, e.g. the
+       Windows / Linux mass-compile percentages). Each value has an instant
+       (no-delay) mouse-over naming its platform via data-tip. */
+    .cidash-chip.cc-split{{background:rgba(110,118,129,.14);color:var(--fg-muted);border-color:rgba(110,118,129,.32)}}
+    .cidash-chip .cidash-vseg{{position:relative;font-weight:700}}
+    .cidash-chip .cidash-vseg.cc-pass{{color:#3fb950}}
+    .cidash-chip .cidash-vseg.cc-fail{{color:#f85149}}
+    .cidash-chip .cidash-vseg.cc-warn{{color:#d29922}}
+    .cidash-chip .cidash-vseg.cc-muted{{color:#8b949e}}
+    /* A hard-failed segment in a split pill is filled bright red (a small solid
+       badge) so it reads as a failure, not just a low number. */
+    .cidash-chip .cidash-vseg.cc-fail.cc-solid{{background:#da3633;color:#fff;padding:1px 7px;border-radius:6px}}
+    .cidash-chip .cidash-vseg-sep{{opacity:.5;margin:0 4px;font-weight:400}}
+    .cidash-chip .cidash-vseg[data-tip]:hover::after{{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 7px);transform:translateX(-50%);background:#1c2128;color:#e6edf3;border:1px solid #30363d;padding:2px 7px;border-radius:6px;font-size:.95em;font-weight:600;white-space:nowrap;pointer-events:none;z-index:30;box-shadow:0 2px 8px rgba(0,0,0,.4)}}
+    .cidash-chip .cidash-vseg[data-tip]:hover::before{{content:"";position:absolute;left:50%;bottom:calc(100% + 2px);transform:translateX(-50%);border:5px solid transparent;border-top-color:#30363d;pointer-events:none;z-index:30}}
     @media(prefers-color-scheme:light){{
       .cidash-chip.cc-pass{{background:#dafbe1;color:#1a7f37;border-color:#2da44e55}}
       .cidash-chip.cc-fail{{background:#ffebe9;color:#cf222e;border-color:#cf222e44}}
       .cidash-chip.cc-warn{{background:#fff8c5;color:#9a6700;border-color:#9a670055}}
       .cidash-chip.cc-info{{background:#ddf4ff;color:#0969da;border-color:#0969da44}}
+      .cidash-chip.cc-split{{background:#eaeef2;color:#57606a;border-color:#d0d7de}}
+      .cidash-chip.cc-fail.cc-solid{{background:#cf222e;color:#fff;border-color:#cf222e}}
+      .cidash-chip .cidash-vseg.cc-pass{{color:#1a7f37}}
+      .cidash-chip .cidash-vseg.cc-fail{{color:#cf222e}}
+      .cidash-chip .cidash-vseg.cc-warn{{color:#9a6700}}
+      .cidash-chip .cidash-vseg.cc-muted{{color:#57606a}}
+      .cidash-chip .cidash-vseg.cc-fail.cc-solid{{background:#cf222e;color:#fff}}
+      .cidash-chip .cidash-vseg[data-tip]:hover::after{{background:#fff;color:#1f2328;border-color:#d0d7de;box-shadow:0 2px 8px rgba(140,149,159,.35)}}
+      .cidash-chip .cidash-vseg[data-tip]:hover::before{{border-top-color:#d0d7de}}
     }}
     /* VIDiff "diff stat": different / new / deleted VI counts for a revision.
        Colour-coded modified-amber / added-green / deleted-red with grey slashes;
@@ -3121,7 +3812,15 @@ html = f"""<!DOCTYPE html>
     // "dialog disappeared on its own" bug).
     function lvciModalOpen() {{
       var m = document.getElementById('lvci-modal');
-      return !!(m && m.style.display === 'block');
+      if (m && m.style.display === 'block') return true;
+      // The Populate-history and Debug Run dialogs are their own modals; reloading
+      // while either is open destroys its in-flight work too (the Debug Run
+      // "dialog vanished while the container booted" bug).
+      var h = document.getElementById('cidash-hist-modal');
+      if (h && h.style.display === 'block') return true;
+      var d = document.getElementById('cidash-debug-modal');
+      if (d && d.style.display === 'block') return true;
+      return false;
     }}
     // Auto-refresh on the cadence the server picked (60 s while CI is live, else
     // 15 min) -- but NEVER while a dialog is open, because reloading the page destroys
@@ -3138,6 +3837,7 @@ html = f"""<!DOCTYPE html>
     }})();
   </script>
   {run_dialog}
+  {debug_dialog}
   <main class="lvci-main">
   <h1>CI Dashboard — {repo_name}</h1>
   <div class="sub">Last updated: {now} &nbsp;|&nbsp; {refresh_note}</div>
@@ -3181,6 +3881,7 @@ html = f"""<!DOCTYPE html>
         <th style="text-align:center">Snapshots</th>
         <th style="text-align:center">Unit Tests</th>
         <th style="text-align:center">Antidoc</th>
+        <th style="text-align:center">Builds</th>
       </tr>
     </thead>
     <tbody>{rows}</tbody>
@@ -3371,6 +4072,7 @@ for _name, _dst in [
     ('vi-analyzer.html', 'ci-out/dashboard/vi-analyzer.html'),
     ('integrate.html', 'ci-out/dashboard/integrate.html'),
     ('unit-tests.html', 'ci-out/dashboard/unit-tests.html'),
+    ('builds.html', 'ci-out/dashboard/builds.html'),
     # Implementation-level "How LabVIEW CI works" reference (linked from the FAQ
     # and the site header); staged so documentation edits actually deploy.
     ('documentation.html', 'ci-out/dashboard/documentation.html'),
@@ -3427,8 +4129,12 @@ def _parse_container_config(path='.github/labview-ci.yml'):
             section = 'actions'; current = None; continue
           m = re.match(r'^\s{6}-\s*path:\s*"?([^"]+?)"?\s*$', line)
           if m:
-            current = {'path': m.group(1).strip(), 'monitor': True}
+            current = {'path': m.group(1).strip(), 'monitor': True, 'monitorOn': None}
             cfg[section].append(current)
+            continue
+          m = re.match(r'^\s{8}monitorOn:\s*(\S+)', line)
+          if m and current is not None:
+            current['monitorOn'] = [s.strip().lower() for s in m.group(1).split('+') if s.strip()]
             continue
           m = re.match(r'^\s{8}monitor:\s*(\S+)', line)
           if m and current is not None:
@@ -3491,16 +4197,26 @@ def _manifest_packages(man):
         name = str(pkg.get('name') or '').strip()
         version = str(pkg.get('version') or '').strip()
         label = str(pkg.get('label') or '').strip()
-        for value in (name, label, f'{name}-{version}' if name and version else ''):
+        # VIPM records versions with a leading "v" (e.g. "v0.5.0.1") and
+        # labels like "name-v0.5.0.1", but VIPC-declared identifiers carry no
+        # "v" (e.g. "name-0.5.0.1"). Emit BOTH forms so the pending
+        # comparison (an exact match against VIPC package ids) matches either.
+        bare = version[1:] if version[:1] in ('v', 'V') else version
+        for value in (name, label,
+                      f'{name}-{version}' if name and version else '',
+                      f'{name}-{bare}' if name and bare else ''):
           if value:
             packages.add(value)
       elif isinstance(pkg, str) and pkg.strip():
         packages.add(pkg.strip())
-    if packages:
-      return sorted(packages, key=str.lower)
+    # Always union the manifest's own vipc[].packages, which are stored in the
+    # SAME identifier form the VIPC files declare (no "v" prefix) and include
+    # every installed version of a package. Never return early on vipm_packages
+    # alone -- that list can differ in version format and omit second versions.
     for vipc in man.get('vipc') or []:
       for pkg in vipc.get('packages') or []:
-        packages.add(pkg)
+        if pkg:
+          packages.add(pkg)
     if not packages and man.get('platform') == 'windows' and man.get('copied_from_base'):
       packages.update(_core_tooling_packages())
   return sorted(packages, key=str.lower)
@@ -3518,6 +4234,12 @@ TOOLING_CORE_VIPC = '.github/labview/vipm/ci-tooling.vipc'
 _CAPABILITY_WORKFLOW = {
   'antidoc': '.github/workflows/run-antidoc-windows-container.yml',
 }
+# Platforms each capability's worker actually bakes/runs on. A capability VIPC is
+# only compared against (and only nags to rebuild) these platforms, so e.g. the
+# Windows-only Antidoc worker never raises a spurious "Linux is missing" prompt.
+_CAPABILITY_PLATFORMS = {
+  'antidoc': ['windows'],
+}
 
 def _capability_for_vipc(path):
   m = re.match(r'^\.github/labview/([^/]+)/(?:[^/]+)\.vipc$', path or '')
@@ -3529,6 +4251,10 @@ def _capability_for_vipc(path):
 def _capability_enabled(cap):
   wf = _CAPABILITY_WORKFLOW.get(cap)
   return bool(wf and os.path.isfile(wf))
+
+def _capability_platforms(cap):
+  """Worker platforms a capability's VIPC is baked into (defaults to Windows)."""
+  return list(_CAPABILITY_PLATFORMS.get(cap) or ['windows'])
 
 def _vipc_role(path, config_vipc, has_config_list):
   """Classify a discovered VIPC and its monitoring state.
@@ -3543,6 +4269,13 @@ def _vipc_role(path, config_vipc, has_config_list):
   cap = _capability_for_vipc(path)
   if cap:
     return 'capability', cap, _capability_enabled(cap), True, False
+  # Any other VIPC under .github/ is internal/experimental tooling, NOT a user
+  # project dependency: the worker "Stage repo VIPC files" step excludes .github/
+  # from baking, so such a file can never be present on the standard workers and
+  # must not be flagged as a missing dependency. Classify it as a tooling file
+  # (capability role, no capability) so it shows N/A rather than a false gap.
+  if (path or '').replace('\\', '/').startswith('.github/'):
+    return 'capability', '', False, True, False
   entry = (config_vipc or {}).get(path)
   monitored = bool(entry and entry.get('monitor') is True) if has_config_list else True
   return 'project', '', monitored, monitored, False
@@ -3616,8 +4349,7 @@ def _load_dragon_module():
   """Import the shared .dragon TOML parser (.github/labview/dragon_deps.py).
 
   Returns the module, or False when it (or a TOML backend) is unavailable so the
-  dashboard still builds. Dragon dependency management is an experimental,
-  Win-Beta-only capability; a repo without the parser simply shows no Dragon
+  dashboard still builds. A repo without the parser simply shows no Dragon
   items."""
   global _DRAGON_MOD
   if _DRAGON_MOD is not None:
@@ -3665,12 +4397,108 @@ def _dragon_status_index(man):
           out[key] = item
   return out
 
-def _annotate_dragon_status(dep, status_index, have_manifest):
+def _vipm_version_index(man):
+  """Map vipm package name -> installed version set from a worker manifest."""
+  out = {}
+  if isinstance(man, dict):
+    for pkg in man.get('vipm_packages') or []:
+      if isinstance(pkg, dict):
+        name = str(pkg.get('name') or '').strip().lower()
+        version = str(pkg.get('version') or '').strip()
+        if name:
+          out.setdefault(name, set()).add(version)
+  return out
+
+def _nipkg_version_index(man):
+  """Map nipkg package name -> installed version set from a worker manifest."""
+  out = {}
+  if isinstance(man, dict):
+    for pkg in man.get('nipkg_packages') or []:
+      if isinstance(pkg, dict):
+        name = str(pkg.get('name') or '').strip().lower()
+        version = str(pkg.get('version') or '').strip()
+        if name:
+          out.setdefault(name, set()).add(version)
+  return out
+
+def _infer_dragon_status(dep, have_manifest, baked_packages, vipm_index, nipkg_index):
+  """Best-effort Dragon status from worker inventories when no dragon block exists.
+
+  Some worker manifests do not publish a dedicated `dragon.items` section yet.
+  In that case, infer status from installed VIPM/NIPM package inventories so an
+  already-baked dependency is not stuck at `not_attempted` forever."""
+  if not have_manifest:
+    return None
+  manager = str(dep.get('manager') or 'vipm').strip().lower()
+  pkg = str(dep.get('package_id') or '').strip()
+  declared = str(dep.get('declared_version') or '').strip()
+  if not pkg:
+    return None
+
+  if manager == 'vipm':
+    low = pkg.lower()
+    versions = sorted(v for v in (vipm_index.get(low) or set()) if v)
+    # Match by explicit package/version id first (pkg-1.2.3 or pkg-v1.2.3), then
+    # by package name/version from `vipm list --installed` parsing.
+    ids = set()
+    if declared:
+      ids.add(f'{pkg}-{declared}'.lower())
+      if not declared.lower().startswith('v'):
+        ids.add(f'{pkg}-v{declared}'.lower())
+    if ids and any(i in baked_packages for i in ids):
+      return {
+        'status': 'installed',
+        'installed_version': declared,
+        'message': 'inferred from Windows worker VIPM package inventory',
+      }
+    if declared and versions and declared in versions:
+      return {
+        'status': 'installed',
+        'installed_version': declared,
+        'message': 'inferred from Windows worker VIPM package inventory',
+      }
+    if versions:
+      return {
+        'status': 'wrong_version',
+        'installed_version': versions[0],
+        'message': 'package is installed, but at a different version',
+      }
+    return {
+      'status': 'missing',
+      'installed_version': '',
+      'message': 'package not found in Windows worker VIPM package inventory',
+    }
+
+  if manager == 'nipm':
+    low = pkg.lower()
+    versions = sorted(v for v in (nipkg_index.get(low) or set()) if v)
+    if not versions:
+      return {
+        'status': 'missing',
+        'installed_version': '',
+        'message': 'package not found in Windows worker NIPM package inventory',
+      }
+    if not declared or declared in versions:
+      return {
+        'status': 'installed',
+        'installed_version': declared or versions[0],
+        'message': 'inferred from Windows worker NIPM package inventory',
+      }
+    return {
+      'status': 'wrong_version',
+      'installed_version': versions[0],
+      'message': 'package is installed, but at a different version',
+    }
+
+  return None
+
+def _annotate_dragon_status(dep, status_index, have_manifest, baked_packages, vipm_index, nipkg_index):
   """Overlay an install status onto a declared Dragon dependency in place.
 
   A cross-file conflict always wins; otherwise the reconciled worker-manifest
-  status is used; a missing manifest means the Win Beta image has not been built
-  yet (pending), and an item absent from a present manifest is not_attempted."""
+  status is used; a missing manifest means the Windows worker has not been built
+  yet (pending), and an item absent from a present manifest falls back to
+  best-effort inference from installed-package inventories."""
   if dep.get('conflict'):
     dep['status'] = 'conflict'
     dep.setdefault('installed_version', '')
@@ -3682,12 +4510,18 @@ def _annotate_dragon_status(dep, status_index, have_manifest):
     dep['installed_version'] = str(st.get('installed_version') or '')
     dep['message'] = str(st.get('message') or '')
   else:
-    dep['status'] = 'not_attempted' if have_manifest else 'pending'
-    dep.setdefault('installed_version', '')
-    dep.setdefault('message', '')
+    inferred = _infer_dragon_status(dep, have_manifest, baked_packages, vipm_index, nipkg_index)
+    if inferred:
+      dep['status'] = inferred['status']
+      dep['installed_version'] = inferred.get('installed_version', '')
+      dep['message'] = inferred.get('message', '')
+    else:
+      dep['status'] = 'not_attempted' if have_manifest else 'pending'
+      dep.setdefault('installed_version', '')
+      dep.setdefault('message', '')
 
 def _build_dragon_section(config=None):
-  """Build the Dragon dependency block for the Dependencies index (Win Beta only).
+  """Build the Dragon dependency block for the Dependencies index (Windows).
 
   Declared dependencies come from repository .dragon files. Each file carries its
   monitor flag so the Dependencies page can suppress warnings and auto-update
@@ -3710,10 +4544,10 @@ def _build_dragon_section(config=None):
     entry = configured.get(f.get('source_file') or '')
     f['monitored'] = bool(entry and entry.get('monitor') is True) if has_config_list else True
   if not files:
-    # No .dragon files in this revision: skip the experimental manifest fetch.
+    # No .dragon files in this revision: skip the worker-manifest fetch.
     return {
       'available': inv.get('available', False),
-      'column': 'winExp',
+      'column': 'windows',
       'ready': False,
       'health': '',
       'manifest_version': '',
@@ -3721,21 +4555,24 @@ def _build_dragon_section(config=None):
       'install_set': [],
       'conflicts': inv.get('conflicts') or [],
     }
-  exp_man = _worker_manifest('windows-beta', 'latest')
-  have_manifest = isinstance(exp_man, dict)
-  status_index = _dragon_status_index(exp_man)
-  exp_dragon = exp_man.get('dragon') if have_manifest else None
+  win_man = _worker_manifest('windows', 'latest')
+  have_manifest = isinstance(win_man, dict)
+  status_index = _dragon_status_index(win_man)
+  win_dragon = win_man.get('dragon') if have_manifest else None
+  baked_packages = {str(p).lower() for p in _manifest_packages(win_man)} if have_manifest else set()
+  vipm_index = _vipm_version_index(win_man) if have_manifest else {}
+  nipkg_index = _nipkg_version_index(win_man) if have_manifest else {}
   for item in inv.get('install_set') or []:
-    _annotate_dragon_status(item, status_index, have_manifest)
+    _annotate_dragon_status(item, status_index, have_manifest, baked_packages, vipm_index, nipkg_index)
   for f in files:
     for dep in f.get('dependencies') or []:
-      _annotate_dragon_status(dep, status_index, have_manifest)
+      _annotate_dragon_status(dep, status_index, have_manifest, baked_packages, vipm_index, nipkg_index)
   return {
     'available': inv.get('available', False) or bool(files),
-    'column': 'winExp',
+    'column': 'windows',
     'ready': have_manifest,
-    'health': (exp_dragon or {}).get('health', '') if isinstance(exp_dragon, dict) else '',
-    'manifest_version': exp_man.get('version', '') if have_manifest else '',
+    'health': (win_dragon or {}).get('health', '') if isinstance(win_dragon, dict) else '',
+    'manifest_version': win_man.get('version', '') if have_manifest else '',
     'files': files,
     'install_set': inv.get('install_set') or [],
     'conflicts': inv.get('conflicts') or [],
@@ -3778,27 +4615,60 @@ def _compute_deps_pending(data):
   current Windows worker manifest; plus declared Dragon deps not yet installed."""
   cols = {c.get('key'): c for c in data.get('columns', [])}
 
+  # Version-tolerant matching: a VIPC pins a specific build (e.g.
+  # "wovalab_lib_antidoc_cli-3.3.0.117") but VIPM installs one version per
+  # package, so a baked "...-3.4.0.126" satisfies the request. Compare on the
+  # versionless base identifier so a present-but-different build is not flagged
+  # as a missing dependency.
+  def _pkg_base(pkg):
+    return re.sub(r'-\d[\d.]*$', '', str(pkg or '')).lower()
+
   def baked(key):
     c = cols.get(key) or {}
-    return {str(p).lower() for p in (c.get('packages') or [])}
+    pkgs = c.get('packages') or []
+    return {str(p).lower() for p in pkgs}, {_pkg_base(p) for p in pkgs}
+
+  def _missing(pkgs, baked_pair):
+    exact, bases = baked_pair
+    return [p for p in pkgs if str(p).lower() not in exact and _pkg_base(p) not in bases]
 
   win_baked = baked('windows')
-  lin_baked = baked('linux')
+  # The Linux worker now installs VIPM natively and bakes repository VIPC (same as
+  # Windows), so a Linux dependency gap is flagged independently -- but only when a
+  # real Linux worker manifest resolved for this revision (a non-base, ready tag).
+  # Otherwise (Linux unused / base image) there is no worker to bake into and we do
+  # not surface a spurious Linux update prompt.
+  lin_col = cols.get('linux') or {}
+  lin_active = bool(lin_col.get('ready')) and str(lin_col.get('tag') or 'base') not in ('base', 'none')
+  lin_baked = baked('linux') if lin_active else set()
   pending_pkgs = set()
   pending_files = []
-  lin_missing = False
+  lin_pending_files = []
   for v in data.get('vipc', []):
-    if v.get('role') != 'project' or not v.get('configured') or v.get('error'):
+    # Project VIPCs always participate. Capability VIPCs (e.g. Antidoc) participate
+    # only when that capability is installed -- _vipc_role sets `configured` to the
+    # capability-enabled flag, so an uninstalled capability is skipped here. Their
+    # monitorOn is limited to the capability's platform(s) (Antidoc = Windows), so a
+    # Windows-only capability never nags about the Linux worker.
+    if v.get('role') not in ('project', 'capability') or not v.get('configured') or v.get('error'):
       continue
     pkgs = v.get('packages') or []
     if not pkgs:
       continue
-    missing = [p for p in pkgs if str(p).lower() not in win_baked]
-    if missing:
-      pending_files.append(v.get('path'))
-      pending_pkgs.update(missing)
-    if any(str(p).lower() not in lin_baked for p in pkgs):
-      lin_missing = True
+    mon = v.get('monitorOn')
+    if mon is None:
+      mon = ['windows', 'linux']
+    if 'windows' in mon:
+      win_missing = _missing(pkgs, win_baked)
+      if win_missing:
+        pending_files.append(v.get('path'))
+        pending_pkgs.update(win_missing)
+    if lin_active and 'linux' in mon:
+      lin_missing_pkgs = _missing(pkgs, lin_baked)
+      if lin_missing_pkgs:
+        lin_pending_files.append(v.get('path'))
+        pending_pkgs.update(lin_missing_pkgs)
+  lin_missing = bool(lin_pending_files)
 
   dragon = data.get('dragon') or {}
   monitored_dragon_keys = set()
@@ -3820,22 +4690,39 @@ def _compute_deps_pending(data):
   containers = []
   if pending_files:
     containers.append('windows')
-    if lin_missing:
-      containers.append('linux')
-  if dragon_pending:
-    containers.append('windows-beta')
+  if lin_missing:
+    containers.append('linux')
 
+  all_files = sorted(set(pending_files) | set(lin_pending_files), key=str.lower)
   return {
     'schema': 1,
-    'pending': bool(pending_files or dragon_pending),
+    'pending': bool(pending_files or lin_missing or dragon_pending),
     'repo': data.get('repo', ''),
     'sha': data.get('sha', ''),
     'packages': sorted(pending_pkgs, key=str.lower),
-    'vipcs': pending_files,
+    'vipcs': all_files,
     'dragon': dragon_pending,
     'containers': sorted(set(containers)),
     'generated': __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
   }
+
+MONITOR_PLATFORMS = ['windows', 'linux']
+
+def _monitor_on(entry, has_config_list, is_core):
+  """Worker platforms a dependency file is monitored for. Back-compat: monitor:true
+  with no monitorOn list = every platform; and when no config list exists yet every
+  project file defaults to all platforms."""
+  if is_core:
+    return list(MONITOR_PLATFORMS)
+  if not has_config_list:
+    return list(MONITOR_PLATFORMS)
+  if not entry or entry.get('monitor') is not True:
+    return []
+  on = entry.get('monitorOn')
+  if isinstance(on, list) and on:
+    low = [str(x).lower() for x in on]
+    return [p for p in MONITOR_PLATFORMS if p in low]
+  return list(MONITOR_PLATFORMS)
 
 def _build_dependencies_index():
   config = _parse_container_config()
@@ -3846,8 +4733,15 @@ def _build_dependencies_index():
   for path in vipc_paths:
     packages, error = _parse_vipc_packages(path) if os.path.isfile(path) else ([], '')
     role, capability, configured, monitored, locked = _vipc_role(path, config_vipc, has_config_list)
+    if role == 'capability':
+      # A capability VIPC is baked only into its capability's worker platform(s),
+      # so limit its monitored columns accordingly (Antidoc = Windows only).
+      monitor_on = _capability_platforms(capability)
+    else:
+      monitor_on = _monitor_on(config_vipc.get(path), has_config_list, role == 'core')
     vipcs.append({'path': path, 'role': role, 'capability': capability,
                   'tooling': role == 'core', 'configured': configured, 'monitored': monitored,
+                  'monitorOn': monitor_on,
                   'locked': locked, 'packages': packages, 'error': error})
   columns = [
     {'key': 'windows', 'label': 'Windows', 'platform': 'windows', 'defaultTag': 'latest'},
@@ -3888,6 +4782,8 @@ def _build_dependencies_index():
       'message': ((c.get('commit') or {}).get('message') or c.get('sha', '')).split('\n')[0],
       'author': ((c.get('commit') or {}).get('author') or {}).get('name', ''),
       'date': ((c.get('commit') or {}).get('author') or {}).get('date', ''),
+      'project': classify_commit(c['sha'])['is_project'],
+      'dep_only': classify_commit(c['sha'])['is_dep_only'],
     } for c in commits_data if c.get('sha')],
     'config': config,
     'vipc': vipcs,
