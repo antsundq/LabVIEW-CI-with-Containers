@@ -1,11 +1,20 @@
 {
   "schema": 1,
   "repo": "antsundq/LabVIEW-CI-with-Containers",
-  "sha": "aec9a947fe011f534326a45112d37c65aae7c479",
+  "sha": "2ab7ea38467f7123733c120fdf5e11d79b2e044f",
   "revisions": [
     {
-      "sha": "aec9a947fe011f534326a45112d37c65aae7c479",
-      "short": "aec9a94",
+      "sha": "2ab7ea38467f7123733c120fdf5e11d79b2e044f",
+      "short": "2ab7ea3",
+      "message": "Add actions/worker-image: create/update/no-op composite action for the shared LabVIEW worker image",
+      "author": "Anton Sundqvist",
+      "date": "2026-07-28T12:46:55Z",
+      "project": false,
+      "dep_only": false
+    },
+    {
+      "sha": "cbf61e76e0e0fcb5fd203acc83641e01c5069605",
+      "short": "cbf61e7",
       "message": "Merge upstream/main into main",
       "author": "Anton Sundqvist",
       "date": "2026-07-27T09:57:21Z",
@@ -13,8 +22,8 @@
       "dep_only": false
     },
     {
-      "sha": "d85a5cdd1987d0a29af0a03e99754cf03121d5da",
-      "short": "d85a5cd",
+      "sha": "8aae88f4f7ddc7739701a053d1c836fe23878bb2",
+      "short": "8aae88f",
       "message": "Add unit.-tests as a composite action",
       "author": "Anton Sundqvist",
       "date": "2026-07-27T09:55:09Z",
@@ -895,15 +904,6 @@
       "dep_only": false
     },
     {
-      "sha": "39f802bfbc151b2f484a4705506a3a546ff75e5c",
-      "short": "39f802b",
-      "message": "dashboard: show Queued badge when re-running an in-flight activity; force-theme fix",
-      "author": "Elijah Kerry",
-      "date": "2026-07-14T02:10:54Z",
-      "project": false,
-      "dep_only": false
-    },
-    {
       "sha": "00839e49ffd3f8c73e18bb4b4d67a6df69433359",
       "short": "00839e4",
       "message": "Keep example VIPC in Linux-proven artifact shape (v3.39.3)",
@@ -1145,6 +1145,49 @@
         "linux"
       ],
       "locked": true,
+      "packages": [
+        "astemes_lib_lunit-2.0.13.6",
+        "astemes_lib_lunit_cli-1.6.1.23",
+        "astemes_lib_lunit_coverage_analysis_add_on-1.0.0.2",
+        "astemes_lib_lunit_global_fixture_add_on-1.0.5.4",
+        "astemes_lib_lunit_parameterized_add_on-1.1.10.8",
+        "astemes_lib_lunit_test_inheritance_add_on-1.0.5.4",
+        "dataflow_g_lib_g_image-0.5.0.1",
+        "felipefoz_lib_lv_rainbow_terminal-1.1.1.5",
+        "jki_lib_caraya-1.4.4.148",
+        "jki_lib_state_machine-2024.0.3.23",
+        "jki_rsc_toolkits_palette-1.1-1",
+        "labview_open_source_lib_epoch_datetime-1.3.0.8",
+        "labview_open_source_project_lib_labview_open_source_palette-1.0.2.7",
+        "labview_open_source_project_lib_openuri-1.4.0.13",
+        "lvos_lib_caraya_cli_extension-2.0.0.7",
+        "ni_lib_junit_results_api-1.0.1.6",
+        "ni_lib_simple_xml-1.0.0.4",
+        "ni_lib_utf_junit_report-1.0.1.43",
+        "oglib_array-6.0.1.20",
+        "oglib_error-6.0.0.26",
+        "oglib_file-6.0.2.28",
+        "oglib_lvdata-6.0.0.45",
+        "oglib_string-6.0.2.35",
+        "pnr_lib_caraya_junit_for_azure_pipelines-1.2.0.11",
+        "pnr_lib_junit_xml-1.0.0.4",
+        "sas_workshops_lib_lunit_for_g_cli-1.2.1.85",
+        "wiresmith_technology_lib_g_cli-3.0.1.98"
+      ],
+      "error": ""
+    },
+    {
+      "path": "actions/worker-image/ci-tooling.vipc",
+      "role": "project",
+      "capability": "",
+      "tooling": false,
+      "configured": true,
+      "monitored": true,
+      "monitorOn": [
+        "windows",
+        "linux"
+      ],
+      "locked": false,
       "packages": [
         "astemes_lib_lunit-2.0.13.6",
         "astemes_lib_lunit_cli-1.6.1.23",
