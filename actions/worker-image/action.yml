@@ -115,17 +115,16 @@ runs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
 
-    # The bundled Dockerfile's `COPY .github/labview/vipm/ C:/vipm/` becomes
-    # `COPY vipm/ C:/vipm/` against this scratch context — same relative
-    # layout (a single 'vipm' folder holding install-vipc.ps1 + every
-    # .vipc/.dragon/.vip to bake), just rooted outside the caller's checkout
-    # instead of inside it.
+    # The bundled Dockerfile is byte-identical to .github/docker/labview-ci.Dockerfile,
+    # including its `COPY .github/labview/vipm/ C:/vipm/` — so the scratch build
+    # context must reproduce that EXACT relative path (not just a top-level
+    # 'vipm' folder), or Docker's COPY source never exists in the context.
     - name: Stage build context
       id: stage
       shell: pwsh
       run: |
         $ctx = Join-Path $env:RUNNER_TEMP 'worker-image-ctx'
-        $vipmDir = Join-Path $ctx 'vipm'
+        $vipmDir = Join-Path $ctx '.github\labview\vipm'
         New-Item -ItemType Directory -Force -Path $vipmDir | Out-Null
 
         Copy-Item -Path (Join-Path '${{ github.action_path }}' 'install-vipc.ps1') -Destination $vipmDir -Force
