@@ -234,6 +234,12 @@ runs:
         $image = '${{ steps.resolve.outputs.image }}'
         $version = '${{ steps.ver.outputs.version }}'
         $existingDigest = (crane digest "${image}:${version}" 2>$null)
+        # A "not found" here is an EXPECTED, non-error outcome (it's how we detect
+        # create/update), but crane still exits non-zero for it, and PowerShell
+        # cmdlets below (Write-Host/Out-File) never touch $LASTEXITCODE - so
+        # without this reset, GitHub Actions' pwsh wrapper would fail this step
+        # every time the answer is "needs building" (i.e. every create/update).
+        $LASTEXITCODE = 0
         if ($existingDigest) {
           Write-Host "::notice::'${image}:${version}' already exists (digest $existingDigest). Nothing changed since the last build; skipping."
           "outdated=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -291,5 +297,6 @@ runs:
         }
 
         $finalDigest = (crane digest "${image}:${version}" 2>$null)
+        $LASTEXITCODE = 0
         "digest=$finalDigest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
         Write-Host "Published ${image}:${version} (digest $finalDigest)"
