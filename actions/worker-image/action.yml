@@ -40,6 +40,7 @@
 #   cp <source>/.github/docker/labview-ci.Dockerfile        actions/worker-image/Dockerfile
 #   cp <source>/.github/labview/vipm/install-vipc.ps1        actions/worker-image/install-vipc.ps1
 #   cp <source>/.github/labview/vipm/ci-tooling.vipc          actions/worker-image/ci-tooling.vipc
+#   cp <source>/.github/labview/ensure-docker.ps1             actions/worker-image/ensure-docker.ps1
 #
 # The caller's workflow must grant `permissions: packages: write` (GHCR push)
 # and, if using `deps-dir`, must have already checked out the repo.
@@ -115,6 +116,15 @@ runs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
 
+    # windows-2022 runners intermittently start a job before the Docker engine
+    # is up (actions/runner-images#14252, #13888). Wait for/start it before the
+    # first real docker-daemon interaction (the build below); crane and docker
+    # login don't necessarily touch the local engine, so this is the first step
+    # that would actually surface the problem.
+    - name: Ensure Docker daemon is running
+      shell: powershell
+      run: '& "${{ github.action_path }}\ensure-docker.ps1"'
+
     # The bundled Dockerfile is byte-identical to .github/docker/labview-ci.Dockerfile,
     # including its `COPY .github/labview/vipm/ C:/vipm/` — so the scratch build
     # context must reproduce that EXACT relative path (not just a top-level
@@ -126,6 +136,11 @@ runs:
         $ctx = Join-Path $env:RUNNER_TEMP 'worker-image-ctx'
         $vipmDir = Join-Path $ctx '.github\labview\vipm'
         New-Item -ItemType Directory -Force -Path $vipmDir | Out-Null
+
+        # Copy the Dockerfile INTO the context (not just reference it from the
+        # action path) so `docker build -f` always points at a file within the
+        # context being built, matching the vendored workflow's proven layout.
+        Copy-Item -Path (Join-Path '${{ github.action_path }}' 'Dockerfile') -Destination $ctx -Force
 
         Copy-Item -Path (Join-Path '${{ github.action_path }}' 'install-vipc.ps1') -Destination $vipmDir -Force
 
@@ -264,7 +279,7 @@ runs:
           }
         } else {
           $tagFlags = ($tags | ForEach-Object { '-t', $_ })
-          docker build -f (Join-Path '${{ github.action_path }}' 'Dockerfile') `
+          docker build -f (Join-Path $ctx 'Dockerfile') `
             --build-arg LCWC_BASE_IMAGE=$baseImage `
             --build-arg CI_WORKER_VERSION=$version @tagFlags $ctx
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
