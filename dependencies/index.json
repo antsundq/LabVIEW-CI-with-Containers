@@ -1,8 +1,35 @@
 {
   "schema": 1,
   "repo": "antsundq/LabVIEW-CI-with-Containers",
-  "sha": "2ab7ea38467f7123733c120fdf5e11d79b2e044f",
+  "sha": "1a7a2d3d9902edfc96084263bd0164dc63ef5a34",
   "revisions": [
+    {
+      "sha": "1a7a2d3d9902edfc96084263bd0164dc63ef5a34",
+      "short": "1a7a2d3",
+      "message": "worker-image: reset $LASTEXITCODE after expected-nonzero crane digest calls",
+      "author": "Anton Sundqvist",
+      "date": "2026-07-28T14:18:36Z",
+      "project": false,
+      "dep_only": false
+    },
+    {
+      "sha": "e3dee8caf704040c410a9fa1764eb0f8f8b02aa1",
+      "short": "e3dee8c",
+      "message": "worker-image: bundle ensure-docker.ps1 wait/retry; build with Dockerfile inside context",
+      "author": "Anton Sundqvist",
+      "date": "2026-07-28T13:10:39Z",
+      "project": false,
+      "dep_only": false
+    },
+    {
+      "sha": "a228e1022b1cd780c84fc75fd441270f91765575",
+      "short": "a228e10",
+      "message": "worker-image: fix build-context staging to match Dockerfile's COPY .github/labview/vipm/ path",
+      "author": "Anton Sundqvist",
+      "date": "2026-07-28T13:06:23Z",
+      "project": false,
+      "dep_only": false
+    },
     {
       "sha": "2ab7ea38467f7123733c120fdf5e11d79b2e044f",
       "short": "2ab7ea3",
@@ -873,33 +900,6 @@
       "message": "update: don't re-enable activities the repo turned off",
       "author": "Elijah Kerry",
       "date": "2026-07-15T15:58:22Z",
-      "project": false,
-      "dep_only": false
-    },
-    {
-      "sha": "07381993887c2136c1072628da0715fb5a97c4c6",
-      "short": "0738199",
-      "message": "vi-analyzer settings: warn when a .viancfg sits in the tooling-managed .github area",
-      "author": "Elijah Kerry",
-      "date": "2026-07-14T15:49:15Z",
-      "project": false,
-      "dep_only": false
-    },
-    {
-      "sha": "b4dc48ed204ddabbbb1a4eb802d14e4519df88b6",
-      "short": "b4dc48e",
-      "message": "vi-analyzer: don't auto-select a CI action-source config as the project default (blank-report fix)",
-      "author": "Elijah Kerry",
-      "date": "2026-07-14T15:41:29Z",
-      "project": false,
-      "dep_only": false
-    },
-    {
-      "sha": "32e898b12d2b3cf411865855b9dfa45afbe32791",
-      "short": "32e898b",
-      "message": "Dependencies: fix false 'update needed' from VIPM v-prefix mismatch; itemize missing deps (4.4.8)",
-      "author": "Elijah Kerry",
-      "date": "2026-07-14T15:30:07Z",
       "project": false,
       "dep_only": false
     },
