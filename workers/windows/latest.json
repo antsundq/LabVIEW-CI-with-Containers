@@ -1,7 +1,7 @@
 {
-  "version": "win-97f95dc94b08",
+  "version": "win-c6221662a861",
   "platform": "windows",
-  "manifest_url": "https://antsundq.github.io/LabVIEW-CI-with-Containers/workers/windows/win-97f95dc94b08/manifest.html",
-  "build_date": "2026-08-01T07:24:01Z",
-  "git_sha": "1a7a2d3d9902edfc96084263bd0164dc63ef5a34"
+  "manifest_url": "https://antsundq.github.io/LabVIEW-CI-with-Containers/workers/windows/win-c6221662a861/manifest.html",
+  "build_date": "2026-09-30T07:02:36Z",
+  "git_sha": "619b6ed73f6ef3edea9a0164575e72cbc4a1facb"
 }
