@@ -5,3 +5,5 @@ CI / Unit Tests (Linux); the dashboard shows the Windows / Linux split and the
 report's platform toggle switches between them. Keep -Headless as the last
 argument of any unitTests command: override, since Linux LabVIEWCLI ignores
 anything after it.
+Linux worker builds also no longer fail on VIPM packages whose version carries
+a revision suffix (such as jki_rsc_toolkits_palette 1.1-1).
