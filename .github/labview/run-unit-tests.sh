@@ -180,12 +180,17 @@ resolve_test_roots() {
 # $1 tool id, $2 command. Sets CLI_OUTPUT to the console output + session log.
 CLI_OUTPUT=""
 run_cli_command() {
-  local id="$1" cmd="$2" out_file
+  local id="$1" cmd="$2" out_file rc
   out_file="$(mktemp)"
   echo "  [$id] $cmd"
-  bash -c "$cmd" 2>&1 | tee "$out_file"
-  echo "  [$id] exit=${PIPESTATUS[0]} (not a result; the JUnit file is)"
+  # Redirect to a file, never pipe: LabVIEWCLI starts LabVIEW as a child that
+  # inherits these descriptors and keeps running after LabVIEWCLI returns, so a
+  # pipe reader (e.g. tee) would never see EOF and the step would hang.
+  bash -c "$cmd" > "$out_file" 2>&1
+  rc=$?
   CLI_OUTPUT="$(cat "$out_file")"
+  printf '%s\n' "$CLI_OUTPUT"
+  echo "  [$id] exit=$rc (not a result; the JUnit file is)"
   rm -f "$out_file"
 }
 
