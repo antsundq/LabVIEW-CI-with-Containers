@@ -1475,8 +1475,8 @@
         "astemes_lib_lunit-2.0.13.6",
         "astemes_lib_lunit-v2.0.13.6",
         "astemes_lib_lunit_cli",
-        "astemes_lib_lunit_cli-1.7.1.32",
-        "astemes_lib_lunit_cli-v1.7.1.32",
+        "astemes_lib_lunit_cli-1.6.1.23",
+        "astemes_lib_lunit_cli-v1.6.1.23",
         "astemes_lib_lunit_coverage_analysis_add_on",
         "astemes_lib_lunit_coverage_analysis_add_on-1.0.0.2",
         "astemes_lib_lunit_coverage_analysis_add_on-v1.0.0.2",
@@ -1564,7 +1564,7 @@
       "nipkg_ready": true,
       "nipkg_packages": [],
       "labview_version": "2026",
-      "version": "linux-7f660f27ff37"
+      "version": "linux-97111e79b7b3"
     }
   ]
 }
