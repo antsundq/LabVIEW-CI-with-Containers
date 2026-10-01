@@ -1,7 +1,7 @@
 {
-  "version": "linux-7f660f27ff37",
+  "version": "linux-97111e79b7b3",
   "platform": "linux",
-  "manifest_url": "https://antsundq.github.io/LabVIEW-CI-with-Containers/workers/linux/linux-7f660f27ff37/manifest.html",
-  "build_date": "2026-09-30T08:28:38Z",
-  "git_sha": "64ea08c344e4702098aa411b58483011d5bbd2a6"
+  "manifest_url": "https://antsundq.github.io/LabVIEW-CI-with-Containers/workers/linux/linux-97111e79b7b3/manifest.html",
+  "build_date": "2026-10-01T10:53:11Z",
+  "git_sha": "1a7a2d3d9902edfc96084263bd0164dc63ef5a34"
 }
