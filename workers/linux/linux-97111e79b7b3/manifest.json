@@ -4,15 +4,15 @@
   "version": "linux-97111e79b7b3",
   "labview_version": "2026",
   "base_image": "nationalinstruments/labview:latest-linux",
-  "base_digest": "ghcr.io/antsundq/labview-ci-with-containers-labview@sha256:417c532f6dd46970f2dabb8c8ece1284f3c8eccb5e88053909d4a7fe1642521f",
+  "base_digest": "ghcr.io/antsundq/labview-ci-with-containers-labview@sha256:ecbdfdb244d6a79ad7f1f23deee063afbd1de86573bde054f3b9bca577ce2068",
   "seed_image": "",
   "seed_digest": "",
   "worker_layer": "",
   "copied_from_base": false,
   "image_ref": "ghcr.io/antsundq/labview-ci-with-containers-labview:linux-97111e79b7b3",
-  "build_date": "2026-10-01T10:53:11Z",
+  "build_date": "2026-11-01T11:13:13Z",
   "git_sha": "1a7a2d3d9902edfc96084263bd0164dc63ef5a34",
-  "run_url": "https://github.com/antsundq/LabVIEW-CI-with-Containers/actions/runs/36850405050",
+  "run_url": "https://github.com/antsundq/LabVIEW-CI-with-Containers/actions/runs/41299729920",
   "vipc": [
     {
       "file": "Dependencies.vipc",
@@ -64,7 +64,7 @@
       "present": true
     }
   ],
-  "vipm_raw": "Installed packages (27):\n  astemes_lib_lunit v2.0.13.6\n  astemes_lib_lunit_cli v1.6.1.23\n  astemes_lib_lunit_coverage_analysis_add_on v1.0.0.2\n  astemes_lib_lunit_global_fixture_add_on v1.0.5.4\n  astemes_lib_lunit_parameterized_add_on v1.1.10.8\n  astemes_lib_lunit_test_inheritance_add_on v1.0.5.4\n  dataflow_g_lib_g_image v0.5.0.1\n  felipefoz_lib_lv_rainbow_terminal v1.1.1.5\n  jki_lib_caraya v1.4.4.148\n  jki_lib_state_machine v2024.0.3.23\n  labview_open_source_lib_epoch_datetime v1.3.0.8\n  labview_open_source_project_lib_labview_open_source_palette v1.0.2.7\n  labview_open_source_project_lib_openuri v1.4.0.13\n  lvos_lib_caraya_cli_extension v2.0.0.7\n  ni_lib_junit_results_api v1.0.1.6\n  ni_lib_simple_xml v1.0.0.4\n  ni_lib_utf_junit_report v1.0.1.43\n  oglib_appcontrol v4.1.0.7\n  oglib_array v6.0.1.20\n  oglib_error v6.0.0.26\n  oglib_file v6.0.2.28\n  oglib_lvdata v6.0.0.45\n  oglib_string v6.0.2.35\n  pnr_lib_caraya_junit_for_azure_pipelines v1.2.0.11\n  pnr_lib_junit_xml v1.0.0.4\n  sas_workshops_lib_lunit_for_g_cli v1.2.1.85\n  wiresmith_technology_lib_g_cli v3.0.1.98\n",
+  "vipm_raw": "Installed packages (26):\n  astemes_lib_lunit v2.0.13.6\n  astemes_lib_lunit_cli v1.6.1.23\n  astemes_lib_lunit_coverage_analysis_add_on v1.0.0.2\n  astemes_lib_lunit_global_fixture_add_on v1.0.5.4\n  astemes_lib_lunit_parameterized_add_on v1.1.10.8\n  astemes_lib_lunit_test_inheritance_add_on v1.0.5.4\n  dataflow_g_lib_g_image v0.5.0.1\n  felipefoz_lib_lv_rainbow_terminal v1.1.1.5\n  jki_lib_caraya v1.4.4.148\n  jki_lib_state_machine v2024.0.3.23\n  labview_open_source_lib_epoch_datetime v1.3.0.8\n  labview_open_source_project_lib_labview_open_source_palette v1.0.2.7\n  labview_open_source_project_lib_openuri v1.4.0.13\n  lvos_lib_caraya_cli_extension v2.0.0.7\n  ni_lib_junit_results_api v1.0.1.6\n  ni_lib_simple_xml v1.0.0.4\n  ni_lib_utf_junit_report v1.0.1.43\n  oglib_array v6.0.1.20\n  oglib_error v6.0.0.26\n  oglib_file v6.0.2.28\n  oglib_lvdata v6.0.0.45\n  oglib_string v6.0.2.35\n  pnr_lib_caraya_junit_for_azure_pipelines v1.2.0.11\n  pnr_lib_junit_xml v1.0.0.4\n  sas_workshops_lib_lunit_for_g_cli v1.2.1.85\n  wiresmith_technology_lib_g_cli v3.0.1.98\n",
   "vipm_packages": [
     {
       "name": "astemes_lib_lunit",
@@ -155,11 +155,6 @@
       "name": "ni_lib_utf_junit_report",
       "version": "v1.0.1.43",
       "label": "ni_lib_utf_junit_report-v1.0.1.43"
-    },
-    {
-      "name": "oglib_appcontrol",
-      "version": "v4.1.0.7",
-      "label": "oglib_appcontrol-v4.1.0.7"
     },
     {
       "name": "oglib_array",
